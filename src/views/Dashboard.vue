@@ -117,33 +117,61 @@ export default {
 .dashboard {
   width: 100%;
   height: 100vh;
+  min-height: 100vh;
   display: flex;
   flex-direction: column;
   gap: 16px;
   padding: 16px;
   box-sizing: border-box;
+  overflow: hidden;
+  position: relative;
 
   .kpi-row {
     display: flex;
     gap: 16px;
     height: 120px;
+    flex-shrink: 0;
   }
 
   .main-area {
     flex: 1;
     display: flex;
     gap: 16px;
+    min-height: 0;
 
     .left-panel,
     .right-panel {
       flex: 1;
       height: 100%;
+      min-height: 0;
     }
 
     .center-panel {
       flex: 2;
       height: 100%;
+      min-height: 0;
     }
   }
+}
+
+/* 全屏状态下的样式 */
+:fullscreen .dashboard {
+  height: 100vh;
+  min-height: 100vh;
+}
+
+:-webkit-full-screen .dashboard {
+  height: 100vh;
+  min-height: 100vh;
+}
+
+:-moz-full-screen .dashboard {
+  height: 100vh;
+  min-height: 100vh;
+}
+
+:-ms-fullscreen .dashboard {
+  height: 100vh;
+  min-height: 100vh;
 }
 </style>
