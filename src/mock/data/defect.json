@@ -1,0 +1,9 @@
+{
+  "defectTypes": [
+    {"name": "卷形", "count": 32},
+    {"name": "板形", "count": 25},
+    {"name": "表面", "count": 18},
+    {"name": "尺寸", "count": 15},
+    {"name": "其他", "count": 10}
+  ]
+}

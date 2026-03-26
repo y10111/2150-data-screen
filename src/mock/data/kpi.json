@@ -1,0 +1,10 @@
+{
+  "today_actual": 14276,
+  "completion_rate": 99.6,
+  "yield_rate": 98.61,
+  "hot_charge_rate": 52.42,
+  "gas_consumption": 1.24,
+  "quality_lock": 76,
+  "device_downtime": 2.09,
+  "inventory": 0.2739
+}
