@@ -1,9 +1,27 @@
 {
-  "defectTypes": [
-    {"name": "卷形", "count": 32},
-    {"name": "板形", "count": 25},
-    {"name": "表面", "count": 18},
-    {"name": "尺寸", "count": 15},
-    {"name": "其他", "count": 10}
+  "code": 200,
+  "data": [
+    {
+      "date": "2026-03-01",
+      "total": 380,
+      "defects": [
+        { "name": "卷形", "value": 230, "unit": "吨" },
+        { "name": "板形", "value": 150, "unit": "吨" },
+        { "name": "表面", "value": 0, "unit": "吨" },
+        { "name": "尺寸", "value": 0, "unit": "吨" },
+        { "name": "其他", "value": 0, "unit": "吨" }
+      ]
+    },
+    {
+      "date": "2026-03-23",
+      "total": 447,
+      "defects": [
+        { "name": "卷形", "value": 278, "unit": "吨" },
+        { "name": "板形", "value": 169, "unit": "吨" },
+        { "name": "表面", "value": 0, "unit": "吨" },
+        { "name": "尺寸", "value": 0, "unit": "吨" },
+        { "name": "其他", "value": 0, "unit": "吨" }
+      ]
+    }
   ]
 }

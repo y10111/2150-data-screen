@@ -41,11 +41,43 @@ export default {
       this.qualityChart.dispose();
     }
   },
+  watch: {
+    deviceData: {
+      handler() {
+        this.initDeviceChart();
+      },
+      deep: true,
+    },
+    qualityData: {
+      handler() {
+        this.initQualityChart();
+      },
+      deep: true,
+    },
+  },
   methods: {
     initDeviceChart() {
+      if (!this.$refs.deviceChart) return;
+
       this.deviceChart = echarts.init(this.$refs.deviceChart, null, {
         theme: darkTheme,
       });
+
+      // 处理设备数据
+      const dates = this.qualityData.slice(-7).map((item) => {
+        const date = new Date(item.date);
+        return `3月${date.getDate()}日`;
+      });
+
+      const deviceDowntime = this.qualityData
+        .slice(-7)
+        .map((item) => item.device_downtime || 0);
+
+      // 模拟电气、机械、其他数据
+      const electricData = deviceDowntime.map((item) => item * 0.3);
+      const mechanicalData = deviceDowntime.map((item) => item * 0.5);
+      const otherData = deviceDowntime.map((item) => item * 0.2);
+
       const option = {
         tooltip: {
           trigger: "axis",
@@ -62,15 +94,7 @@ export default {
         xAxis: [
           {
             type: "category",
-            data: [
-              "3月1日",
-              "3月2日",
-              "3月3日",
-              "3月4日",
-              "3月5日",
-              "3月6日",
-              "3月7日",
-            ],
+            data: dates,
             axisPointer: {
               type: "shadow",
             },
@@ -81,7 +105,7 @@ export default {
             type: "value",
             name: "小时",
             min: 0,
-            max: 3,
+            max: Math.max(...deviceDowntime, 3),
             interval: 0.5,
           },
         ],
@@ -89,34 +113,50 @@ export default {
           {
             name: "设备事故时间",
             type: "line",
-            data: [1.5, 1.2, 1.8, 0.9, 2.2, 1.4, 0.8],
+            data: deviceDowntime,
           },
           {
             name: "电气",
             type: "bar",
             stack: "total",
-            data: [0.5, 0.3, 0.6, 0.3, 0.8, 0.5, 0.3],
+            data: electricData,
           },
           {
             name: "机械",
             type: "bar",
             stack: "total",
-            data: [0.7, 0.6, 0.8, 0.4, 1.0, 0.6, 0.3],
+            data: mechanicalData,
           },
           {
             name: "其他",
             type: "bar",
             stack: "total",
-            data: [0.3, 0.3, 0.4, 0.2, 0.4, 0.3, 0.2],
+            data: otherData,
           },
         ],
       };
       this.deviceChart.setOption(option);
     },
     initQualityChart() {
+      if (!this.$refs.qualityChart) return;
+
       this.qualityChart = echarts.init(this.$refs.qualityChart, null, {
         theme: darkTheme,
       });
+
+      // 处理质量数据
+      const dates = this.qualityData.slice(-7).map((item) => {
+        const date = new Date(item.date);
+        return `3月${date.getDate()}日`;
+      });
+
+      const qualityLock = this.qualityData
+        .slice(-7)
+        .map((item) => item.quality_lock || 0);
+      const yieldRate = this.qualityData
+        .slice(-7)
+        .map((item) => item.yield_rate || 98);
+
       const option = {
         tooltip: {
           trigger: "axis",
@@ -133,15 +173,7 @@ export default {
         xAxis: [
           {
             type: "category",
-            data: [
-              "3月1日",
-              "3月2日",
-              "3月3日",
-              "3月4日",
-              "3月5日",
-              "3月6日",
-              "3月7日",
-            ],
+            data: dates,
             axisPointer: {
               type: "shadow",
             },
@@ -152,14 +184,14 @@ export default {
             type: "value",
             name: "卷数",
             min: 0,
-            max: 80,
+            max: Math.max(...qualityLock, 80),
             interval: 20,
           },
           {
             type: "value",
             name: "成材率(%)",
-            min: 98,
-            max: 99,
+            min: Math.min(...yieldRate, 98),
+            max: Math.max(...yieldRate, 99),
             interval: 0.2,
           },
         ],
@@ -167,13 +199,13 @@ export default {
           {
             name: "质量封锁",
             type: "bar",
-            data: [65, 70, 68, 60, 75, 65, 58],
+            data: qualityLock,
           },
           {
             name: "成材率",
             type: "line",
             yAxisIndex: 1,
-            data: [98.5, 98.7, 98.6, 98.8, 98.4, 98.6, 98.9],
+            data: yieldRate,
           },
         ],
       };

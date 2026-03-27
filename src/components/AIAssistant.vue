@@ -3,7 +3,7 @@
     <h3 class="assistant-title">AI智能预警与建议</h3>
     <div class="alerts-container">
       <div
-        v-for="alert in alerts"
+        v-for="alert in displayAlerts"
         :key="alert.id"
         class="alert-item"
         :class="alert.type"
@@ -25,46 +25,9 @@ export default {
       default: () => [],
     },
   },
-  data() {
-    return {
-      defaultAlerts: [
-        {
-          id: 1,
-          type: "预警",
-          content: "当前产量落后计划8%，建议检查卷取机状态",
-          time: "2026-03-26 10:30:00",
-        },
-        {
-          id: 2,
-          type: "根因分析",
-          content: "近期欠产主要与待热时间增加有关，建议优化加热炉节奏",
-          time: "2026-03-26 09:15:00",
-        },
-        {
-          id: 3,
-          type: "优化建议",
-          content:
-            "热装率偏低，预计明日煤气单耗将上升0.05 GJ/t，建议调整装炉节奏",
-          time: "2026-03-26 08:45:00",
-        },
-        {
-          id: 4,
-          type: "预测信息",
-          content: "明日产量预测：14400-14600吨",
-          time: "2026-03-26 08:00:00",
-        },
-        {
-          id: 5,
-          type: "RPA状态",
-          content: "今日调度会汇报已自动生成",
-          time: "2026-03-26 07:30:00",
-        },
-      ],
-    };
-  },
   computed: {
     displayAlerts() {
-      return this.alerts.length > 0 ? this.alerts : this.defaultAlerts;
+      return this.alerts.length > 0 ? this.alerts : [];
     },
   },
 };

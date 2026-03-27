@@ -3,9 +3,9 @@
     <div class="chart-header">
       <h3 class="chart-title">产量趋势分析</h3>
       <div class="chart-info">
-        <span class="info-item">累计欠产: -18067吨</span>
-        <span class="info-item">最高产量: 14300吨</span>
-        <span class="info-item">最低产量: 13700吨</span>
+        <span class="info-item">累计欠产: {{ totalUnderproduction }}吨</span>
+        <span class="info-item">最高产量: {{ maxProduction }}吨</span>
+        <span class="info-item">最低产量: {{ minProduction }}吨</span>
       </div>
     </div>
     <div class="chart-container" ref="productionChart"></div>
@@ -24,6 +24,24 @@ export default {
       default: () => [],
     },
   },
+  computed: {
+    totalUnderproduction() {
+      if (!this.productionData || this.productionData.length === 0) return 0;
+      return this.productionData
+        .reduce((total, item) => {
+          return total + (item.today_actual - item.today_plan);
+        }, 0)
+        .toFixed(0);
+    },
+    maxProduction() {
+      if (!this.productionData || this.productionData.length === 0) return 0;
+      return Math.max(...this.productionData.map((item) => item.today_actual));
+    },
+    minProduction() {
+      if (!this.productionData || this.productionData.length === 0) return 0;
+      return Math.min(...this.productionData.map((item) => item.today_actual));
+    },
+  },
   mounted() {
     this.initProductionChart();
     window.addEventListener("resize", this.handleResize);
@@ -34,11 +52,36 @@ export default {
       this.productionChart.dispose();
     }
   },
+  watch: {
+    productionData: {
+      handler() {
+        this.initProductionChart();
+      },
+      deep: true,
+    },
+  },
   methods: {
     initProductionChart() {
+      if (!this.$refs.productionChart) return;
+
       this.productionChart = echarts.init(this.$refs.productionChart, null, {
         theme: darkTheme,
       });
+
+      // 处理生产数据
+      const dates = this.productionData.map((item) => {
+        const date = new Date(item.date);
+        return `3月${date.getDate()}日`;
+      });
+
+      const planProduction = this.productionData.map((item) => item.today_plan);
+      const actualProduction = this.productionData.map(
+        (item) => item.today_actual
+      );
+
+      const minY = Math.min(...actualProduction, ...planProduction) - 500;
+      const maxY = Math.max(...actualProduction, ...planProduction) + 500;
+
       const option = {
         tooltip: {
           trigger: "axis",
@@ -55,31 +98,7 @@ export default {
         xAxis: [
           {
             type: "category",
-            data: [
-              "3月1日",
-              "3月2日",
-              "3月3日",
-              "3月4日",
-              "3月5日",
-              "3月6日",
-              "3月7日",
-              "3月8日",
-              "3月9日",
-              "3月10日",
-              "3月11日",
-              "3月12日",
-              "3月13日",
-              "3月14日",
-              "3月15日",
-              "3月16日",
-              "3月17日",
-              "3月18日",
-              "3月19日",
-              "3月20日",
-              "3月21日",
-              "3月22日",
-              "3月23日",
-            ],
+            data: dates,
             axisPointer: {
               type: "shadow",
             },
@@ -89,8 +108,8 @@ export default {
           {
             type: "value",
             name: "产量(吨)",
-            min: 13500,
-            max: 14500,
+            min: minY,
+            max: maxY,
             interval: 200,
           },
         ],
@@ -98,7 +117,7 @@ export default {
           {
             name: "计划产量",
             type: "line",
-            data: Array(23).fill(14000),
+            data: planProduction,
             lineStyle: {
               type: "dashed",
               color: "#ff9800",
@@ -113,14 +132,12 @@ export default {
           {
             name: "实轧产量",
             type: "bar",
-            data: [
-              13800, 14100, 13900, 14200, 13700, 14000, 14300, 13950, 14150,
-              13850, 14250, 14050, 13900, 14100, 13800, 14200, 14000, 14300,
-              13950, 14150, 13850, 14250, 14050,
-            ],
+            data: actualProduction,
             itemStyle: {
               color: function (params) {
-                return params.value < 14000 ? "#f44336" : "#4caf50";
+                return params.value < planProduction[params.dataIndex]
+                  ? "#f44336"
+                  : "#4caf50";
               },
             },
           },

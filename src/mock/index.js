@@ -6,7 +6,7 @@ import defectData from "./data/defect.json";
 import aiAlertsData from "./data/aiAlerts.json";
 import deviceHealthData from "./data/deviceHealth.json";
 
-Mock.setup({ timeout: "200-600" });
+// Mock.setup({ timeout: "200-600" });
 
 Mock.mock("/api/dashboard/kpi", "get", {
   code: 200,
