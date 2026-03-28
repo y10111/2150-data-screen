@@ -61,17 +61,27 @@ export default {
     },
   },
   methods: {
-    initProductionChart() {
-      if (!this.$refs.productionChart) return;
-
+    formatDateLabel(dateText) {
+      const date = new Date(dateText);
+      return `${date.getMonth() + 1}月${date.getDate()}日`;
+    },
+    getOrCreateChart() {
+      if (this.productionChart) {
+        return this.productionChart;
+      }
       this.productionChart = echarts.init(this.$refs.productionChart, null, {
         theme: darkTheme,
       });
+      return this.productionChart;
+    },
+    initProductionChart() {
+      if (!this.$refs.productionChart) return;
+
+      const chart = this.getOrCreateChart();
 
       // 处理生产数据
       const dates = this.productionData.map((item) => {
-        const date = new Date(item.date);
-        return `3月${date.getDate()}日`;
+        return this.formatDateLabel(item.date);
       });
 
       const planProduction = this.productionData.map((item) => item.today_plan);
@@ -81,19 +91,30 @@ export default {
 
       const minY = Math.min(...actualProduction, ...planProduction) - 500;
       const maxY = Math.max(...actualProduction, ...planProduction) + 500;
+      const xLabelInterval = Math.max(1, Math.ceil(dates.length / 8));
 
       const option = {
+        grid: {
+          left: 55,
+          right: 45,
+          top: 60,
+          bottom: 55,
+          containLabel: true,
+        },
         tooltip: {
           trigger: "axis",
           axisPointer: {
-            type: "cross",
-            crossStyle: {
-              color: "#999",
-            },
+            // 避免 cross 在 hover 时制造“大面积横向刷屏”
+            type: "shadow",
+            shadowStyle: { color: "rgba(0,0,0,0.12)" },
           },
         },
         legend: {
           data: ["计划产量", "实轧产量"],
+          top: 10,
+          left: "center",
+          textStyle: { color: "#8c9ab3", fontSize: 12 },
+          itemGap: 16,
         },
         xAxis: [
           {
@@ -101,6 +122,13 @@ export default {
             data: dates,
             axisPointer: {
               type: "shadow",
+            },
+            axisTick: { show: false },
+            axisLabel: {
+              color: "#8c9ab3",
+              interval: xLabelInterval,
+              fontSize: 12,
+              margin: 10,
             },
           },
         ],
@@ -110,7 +138,19 @@ export default {
             name: "产量(吨)",
             min: minY,
             max: maxY,
-            interval: 200,
+            // 进一步减少刻度数量，避免 y 轴标签重叠
+            splitNumber: 2,
+            axisLabel: {
+              show: true,
+              color: "#8c9ab3",
+              fontSize: 9,
+              formatter: (v) => `${Math.round(v)}`,
+              hideOverlap: true,
+              margin: 0,
+            },
+            splitLine: {
+              lineStyle: { color: "rgba(255,255,255,0.04)" },
+            },
           },
         ],
         series: [
@@ -118,9 +158,12 @@ export default {
             name: "计划产量",
             type: "line",
             data: planProduction,
+            symbol: "none",
+            smooth: true,
             lineStyle: {
               type: "dashed",
               color: "#ff9800",
+              width: 2,
             },
             areaStyle: {
               color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
@@ -133,17 +176,19 @@ export default {
             name: "实轧产量",
             type: "bar",
             data: actualProduction,
+            barMaxWidth: 18,
             itemStyle: {
               color: function (params) {
                 return params.value < planProduction[params.dataIndex]
                   ? "#f44336"
                   : "#4caf50";
               },
+              borderRadius: [4, 4, 0, 0],
             },
           },
         ],
       };
-      this.productionChart.setOption(option);
+      chart.setOption(option, true);
     },
     handleResize() {
       if (this.productionChart) {

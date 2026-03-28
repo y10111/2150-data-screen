@@ -1,48 +1,35 @@
 <template>
-  <!-- 仪表板主容器 -->
-  <div class="dashboard">
-    <!-- 顶部导航栏组件 -->
-    <Header />
-    <!-- KPI指标卡片行，显示8个关键绩效指标 -->
-    <div class="kpi-row">
-      <!-- 循环渲染KPI卡片，每个卡片占据3列宽度 -->
+  <main class="dashboard">
+    <Header class="dashboard-header" />
+    <section class="dashboard-section kpi-section">
       <el-col :span="3" v-for="kpi in kpiList" :key="kpi.name">
-        <!-- KPI卡片组件，传入单个KPI数据 -->
         <KPICard :data="kpi" />
       </el-col>
-    </div>
-    <!-- 主内容区域，包含左中右三个面板 -->
-    <div class="main-area">
-      <!-- 左侧面板：设备与事故分析、质量与成材分析 -->
-      <div class="left-panel">
-        <!-- 边框装饰组件1 -->
-        <dv-border-box-1>
-          <!-- 左侧面板组件，传入设备数据和质量数据 -->
-          <LeftPanel :deviceData="deviceData" :qualityData="qualityData" />
-        </dv-border-box-1>
-      </div>
-      <!-- 中间面板：产量趋势分析 -->
-      <div class="center-panel">
-        <!-- 边框装饰组件2 -->
-        <dv-border-box-2>
-          <!-- 中间图表组件，传入生产趋势数据 -->
-          <CenterChart :productionData="trendData" />
-        </dv-border-box-2>
-      </div>
-      <!-- 右侧面板：能耗与热装分析、库存与缴库分析 -->
-      <div class="right-panel">
-        <!-- 边框装饰组件3 -->
-        <dv-border-box-3>
-          <!-- 右侧面板组件，传入能耗数据和库存数据 -->
-          <RightPanel :energyData="energyData" :inventoryData="inventoryData" />
-        </dv-border-box-3>
-      </div>
-    </div>
-    <!-- AI智能预警与建议组件，传入预警数据 -->
-    <AIAssistant :alerts="aiAlerts" />
-    <!-- 底部信息栏组件 -->
-    <Footer />
-  </div>
+    </section>
+    <PanelFrame class="panel left-panel" borderComponent="dv-border-box-1" stacked>
+      <DeviceAccidentChart
+        :qualityData="qualityData"
+      />
+      <QualityYieldChart :qualityData="qualityData" :defectData="defectData" />
+    </PanelFrame>
+    <PanelFrame class="panel center-panel" borderComponent="dv-border-box-2">
+      <CenterChart :productionData="trendData" />
+    </PanelFrame>
+    <PanelFrame class="panel right-panel" borderComponent="dv-border-box-1" stacked>
+      <EnergyHotChargeChart :energyData="energyData" />
+      <InventoryDeliveryChart
+        :inventoryData="inventoryData"
+        :energyData="energyData"
+      />
+    </PanelFrame>
+    <PanelFrame
+      class="dashboard-section alert-section"
+      borderComponent="dv-border-box-1"
+    >
+      <AIAssistant :alerts="aiAlerts" />
+    </PanelFrame>
+    <Footer class="dashboard-footer" />
+  </main>
 </template>
 
 <script>
@@ -52,16 +39,18 @@ import Header from "@/components/Header.vue";
 import Footer from "@/components/Footer.vue";
 // 导入KPI指标卡片组件
 import KPICard from "@/components/KPICard.vue";
-// 导入左侧面板组件
-import LeftPanel from "@/components/LeftPanel.vue";
 // 导入中间图表组件
 import CenterChart from "@/components/CenterChart.vue";
-// 导入右侧面板组件
-import RightPanel from "@/components/RightPanel.vue";
+import DeviceAccidentChart from "@/components/DeviceAccidentChart.vue";
+import QualityYieldChart from "@/components/QualityYieldChart.vue";
+import EnergyHotChargeChart from "@/components/EnergyHotChargeChart.vue";
+import InventoryDeliveryChart from "@/components/InventoryDeliveryChart.vue";
+import PanelFrame from "@/components/PanelFrame.vue";
 // 导入AI智能预警组件
 import AIAssistant from "@/components/AIAssistant.vue";
 // 导入仪表板API接口
 import { dashboardApi } from "@/api";
+import { DASHBOARD_CONSTANTS } from "@/config/dashboardConstants";
 
 export default {
   name: "DataDashboard",
@@ -70,9 +59,12 @@ export default {
     Header,
     Footer,
     KPICard,
-    LeftPanel,
     CenterChart,
-    RightPanel,
+    DeviceAccidentChart,
+    QualityYieldChart,
+    EnergyHotChargeChart,
+    InventoryDeliveryChart,
+    PanelFrame,
     AIAssistant,
   },
   // 组件数据
@@ -103,6 +95,24 @@ export default {
   },
   // 组件方法
   methods: {
+    normalizeListResponse(payload) {
+      if (Array.isArray(payload)) {
+        return payload;
+      }
+      if (payload && Array.isArray(payload.data)) {
+        return payload.data;
+      }
+      // 兼容：mock/json 里也包含 { code, data: [] }，再被 mock/index.js 包一层
+      if (
+        payload &&
+        payload.data &&
+        typeof payload.data === "object" &&
+        Array.isArray(payload.data.data)
+      ) {
+        return payload.data.data;
+      }
+      return [];
+    },
     // 获取所有仪表板数据
     async fetchAllData() {
       try {
@@ -129,13 +139,19 @@ export default {
           dashboardApi.getDeviceHealth(),
         ]);
 
+        const kpiData = this.normalizeListResponse(kpiRes);
+        const trendData = this.normalizeListResponse(trendRes);
+        const inventoryData = this.normalizeListResponse(inventoryRes);
+        const defectData = this.normalizeListResponse(defectRes);
+        const aiAlertsData = this.normalizeListResponse(aiAlertsRes);
+        const deviceHealthData = this.normalizeListResponse(deviceHealthRes);
+
         // 处理KPI数据
-        // 检查请求是否成功且返回的数据数组不为空
-        if (kpiRes.code === 200 && kpiRes.data.length > 0) {
+        if (kpiData.length > 0) {
           // 获取最新的KPI数据（数组最后一个元素）
-          const latestKpi = kpiRes.data[kpiRes.data.length - 1];
+          const latestKpi = kpiData[kpiData.length - 1];
           // 获取前一天的KPI数据（数组倒数第二个元素），用于计算趋势
-          const previousKpi = kpiRes.data[kpiRes.data.length - 2];
+          const previousKpi = kpiData[kpiData.length - 2];
 
           // 计算趋势值
           const calculateTrend = (current, previous) => {
@@ -178,7 +194,7 @@ export default {
                 previousKpi?.yield_rate
               ),
               // 如果成材率低于98%，显示警告
-              warning: latestKpi.yield_rate < 98,
+              warning: latestKpi.yield_rate < DASHBOARD_CONSTANTS.yieldWarning,
             },
             {
               name: "热装率",
@@ -189,7 +205,8 @@ export default {
                 previousKpi?.hot_charge_rate
               ),
               // 如果热装率低于50%，显示警告
-              warning: latestKpi.hot_charge_rate < 50,
+              warning:
+                latestKpi.hot_charge_rate < DASHBOARD_CONSTANTS.hotChargeWarning,
             },
             {
               name: "煤气单耗",
@@ -200,7 +217,8 @@ export default {
                 previousKpi?.gas_consumption
               ),
               // 如果煤气单耗超过1.2，显示警告
-              warning: latestKpi.gas_consumption > 1.2,
+              warning:
+                latestKpi.gas_consumption > DASHBOARD_CONSTANTS.gasConsumptionWarning,
             },
             {
               name: "质量封锁",
@@ -211,7 +229,8 @@ export default {
                 previousKpi?.quality_lock
               ),
               // 如果质量封锁超过50卷，显示警告
-              warning: latestKpi.quality_lock > 50,
+              warning:
+                latestKpi.quality_lock > DASHBOARD_CONSTANTS.qualityLockWarning,
             },
             {
               name: "设备事故时间",
@@ -222,7 +241,8 @@ export default {
                 previousKpi?.device_downtime
               ),
               // 如果设备事故时间超过2小时，显示警告
-              warning: latestKpi.device_downtime > 2,
+              warning:
+                latestKpi.device_downtime > DASHBOARD_CONSTANTS.deviceDowntimeWarning,
             },
             {
               name: "钢坯库存",
@@ -233,33 +253,34 @@ export default {
                 previousKpi?.inventory
               ),
               // 如果钢坯库存低于0.5万吨，显示警告
-              warning: latestKpi.inventory < 0.5,
+              warning:
+                latestKpi.inventory < DASHBOARD_CONSTANTS.inventoryLowWarning,
             },
           ];
         }
 
         // 处理趋势数据
-        if (trendRes.code === 200) {
+        if (trendData.length > 0) {
           // 保存趋势数据
-          this.trendData = trendRes.data;
+          this.trendData = trendData;
         }
 
         // 处理库存数据
-        if (inventoryRes.code === 200) {
+        if (inventoryData.length > 0) {
           // 保存库存数据
-          this.inventoryData = inventoryRes.data;
+          this.inventoryData = inventoryData;
         }
 
         // 处理缺陷数据
-        if (defectRes.code === 200) {
+        if (defectData.length > 0) {
           // 保存缺陷数据
-          this.defectData = defectRes.data;
+          this.defectData = defectData;
         }
 
         // 处理AI预警数据
-        if (aiAlertsRes.code === 200 && aiAlertsRes.data.length > 0) {
+        if (aiAlertsData.length > 0) {
           // 获取最新的预警数据
-          const latestAlerts = aiAlertsRes.data[aiAlertsRes.data.length - 1];
+          const latestAlerts = aiAlertsData[aiAlertsData.length - 1];
           // 转换预警数据格式
           this.aiAlerts = latestAlerts.alerts.map((alert) => ({
             id: alert.id,
@@ -277,23 +298,26 @@ export default {
         }
 
         // 处理设备健康数据
-        if (deviceHealthRes.code === 200) {
+        if (deviceHealthData.length > 0) {
           // 保存设备健康数据
-          this.deviceData = deviceHealthRes.data;
+          this.deviceData = deviceHealthData;
         }
 
         // 构建质量数据
-        this.qualityData = kpiRes.data.map((item) => ({
+        this.qualityData = kpiData.map((item) => ({
           date: item.date,
           quality_lock: item.quality_lock,
           yield_rate: item.yield_rate,
+          device_downtime: item.device_downtime,
+          device_type: item.device_type,
         }));
 
         // 构建能耗数据
-        this.energyData = kpiRes.data.map((item) => ({
+        this.energyData = kpiData.map((item) => ({
           date: item.date,
           hot_charge_rate: item.hot_charge_rate,
           gas_consumption: item.gas_consumption,
+          delivery: item.delivery,
         }));
       } catch (error) {
         // 捕获并输出错误信息
@@ -310,43 +334,59 @@ export default {
   width: 100%;
   height: 100vh;
   min-height: 100vh;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 1fr 2fr 1fr;
+  grid-template-rows: auto 120px minmax(0, 1fr) auto auto;
   gap: 16px;
   padding: 16px;
   box-sizing: border-box;
   overflow: hidden;
   position: relative;
 
-  /* KPI指标卡片行样式 */
-  .kpi-row {
-    display: flex;
-    gap: 16px;
-    height: 120px;
-    flex-shrink: 0;
+  .dashboard-section {
+    min-width: 0;
   }
 
-  /* 主内容区域样式 */
-  .main-area {
-    flex: 1;
+  .kpi-section {
     display: flex;
     gap: 16px;
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .alert-section {
+    grid-column: 1 / -1;
+    grid-row: 4;
+  }
+
+  .dashboard-header {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+
+  .dashboard-footer {
+    grid-column: 1 / -1;
+    grid-row: 5;
+  }
+
+  .panel {
+    height: 100%;
     min-height: 0;
+  }
 
-    /* 左右面板样式 */
-    .left-panel,
-    .right-panel {
-      flex: 1;
-      height: 100%;
-      min-height: 0;
-    }
+  .left-panel {
+    grid-column: 1;
+    grid-row: 3;
+  }
 
-    /* 中间面板样式 */
-    .center-panel {
-      flex: 2;
-      height: 100%;
-      min-height: 0;
-    }
+  .center-panel {
+    grid-column: 2;
+    grid-row: 3;
+  }
+
+  .right-panel {
+    grid-column: 3;
+    grid-row: 3;
   }
 }
 

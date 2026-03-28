@@ -4,15 +4,15 @@
       <img src="/ansteel.svg" alt="鞍钢logo" class="logo" />
     </div>
     <div class="header-center">
-      <h1>鞍钢股份有限公司热轧带钢厂2150线数据化大屏运营决策平台</h1>
+      <h1>{{ headerTitle }}</h1>
     </div>
     <div class="header-right">
       <div class="info-section">
         <div class="time-info">{{ fullTimeInfo }}</div>
         <div class="weather-info">
-          <span>鞍山</span>
+          <span>{{ weatherCity }}</span>
           <span class="weather-icon">☀️</span>
-          <span>晴 15°C</span>
+          <span>{{ weatherText }}</span>
         </div>
       </div>
     </div>
@@ -25,11 +25,23 @@ export default {
   data() {
     return {
       fullTimeInfo: "",
+      timer: null,
+      headerTitle:
+        process.env.VUE_APP_HEADER_TITLE ||
+        "鞍钢股份有限公司热轧带钢厂2150线数据化大屏运营决策平台",
+      weatherCity: process.env.VUE_APP_WEATHER_CITY || "鞍山",
+      weatherText: process.env.VUE_APP_WEATHER_TEXT || "晴 15°C",
     };
   },
   mounted() {
     this.updateDateTime();
-    setInterval(this.updateDateTime, 1000);
+    this.timer = setInterval(this.updateDateTime, 1000);
+  },
+  beforeDestroy() {
+    if (this.timer) {
+      clearInterval(this.timer);
+      this.timer = null;
+    }
   },
   methods: {
     updateDateTime() {
