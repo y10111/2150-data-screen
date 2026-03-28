@@ -5,10 +5,10 @@
       <span class="value">{{ data.value }}</span>
       <span class="unit">{{ data.unit }}</span>
     </div>
-    <div class="kpi-trend">
-      <span class="trend" :class="{ up: data.trend > 0, down: data.trend < 0 }">
-        {{ data.trend > 0 ? "↑" : "↓" }}{{ Math.abs(data.trend) }}%
-      </span>
+    <div v-if="valueNote" class="kpi-value-note">{{ valueNote }}</div>
+    <div class="kpi-trend-row">
+      <span class="trend-prefix">{{ trendBaselineText }}</span>
+      <span class="trend" :class="trendClass">{{ trendPrimary }}</span>
       <span v-if="isWarning" class="warning-icon">⚠️</span>
     </div>
   </div>
@@ -26,6 +26,30 @@ export default {
   computed: {
     isWarning() {
       return this.data.warning || false;
+    },
+    trendBaselineText() {
+      return this.data.trendBaseline != null
+        ? this.data.trendBaseline
+        : "较昨日";
+    },
+    valueNote() {
+      return this.data.valueNote || "";
+    },
+    trendPrimary() {
+      if (this.data.trendDetail) return this.data.trendDetail;
+      const t = this.data.trend;
+      if (t === null || t === undefined || Number.isNaN(Number(t))) {
+        return "—";
+      }
+      const n = Number(t);
+      if (n === 0) return "→ 0.0%";
+      return `${n > 0 ? "↑ " : "↓ "}${Math.abs(n).toFixed(1)}%`;
+    },
+    trendClass() {
+      if (this.data.trendDetail || this.data.neutralTrend) return "neutral";
+      const t = Number(this.data.trend);
+      if (t === 0 || Number.isNaN(t)) return "neutral";
+      return { up: t > 0, down: t < 0 };
     },
   },
 };
@@ -57,7 +81,7 @@ export default {
   }
 
   .kpi-value {
-    margin-bottom: 8px;
+    margin-bottom: 4px;
 
     .value {
       font-size: 24px;
@@ -72,14 +96,30 @@ export default {
     }
   }
 
-  .kpi-trend {
+  .kpi-value-note {
+    font-size: 11px;
+    color: #6b7a94;
+    margin-bottom: 6px;
+    line-height: 1.3;
+  }
+
+  .kpi-trend-row {
     display: flex;
     justify-content: center;
     align-items: center;
-    gap: 8px;
+    flex-wrap: nowrap;
+    gap: 0.35em;
+    font-size: 12px;
+    line-height: 1.35;
+    white-space: nowrap;
+
+    .trend-prefix {
+      color: #6b7a94;
+      flex-shrink: 0;
+    }
 
     .trend {
-      font-size: 12px;
+      flex-shrink: 0;
 
       &.up {
         color: #4caf50;
@@ -88,10 +128,16 @@ export default {
       &.down {
         color: #f44336;
       }
+
+      &.neutral {
+        color: #9eb1cc;
+      }
     }
 
     .warning-icon {
-      font-size: 14px;
+      font-size: 13px;
+      line-height: 1;
+      flex-shrink: 0;
     }
   }
 }

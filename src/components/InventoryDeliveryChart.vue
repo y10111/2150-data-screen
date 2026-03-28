@@ -20,6 +20,7 @@ import {
   panelTitleModule,
   panelCaptionBottomCenter,
   panelLegendStandard,
+  formatAxisDateMd,
 } from "../utils/echarts";
 import { DASHBOARD_CONSTANTS } from "@/config/dashboardConstants";
 import { observeElementsForResize } from "@/utils/chartResizeObserver";
@@ -80,10 +81,6 @@ export default {
     },
   },
   methods: {
-    formatDateLabel(dateText) {
-      const date = new Date(dateText);
-      return `${date.getMonth() + 1}月${date.getDate()}日`;
-    },
     getOrCreateTrendChart() {
       if (this.trendChart) return this.trendChart;
       this.trendChart = echarts.init(this.$refs.inventoryChart, null, {
@@ -106,7 +103,7 @@ export default {
       this.updateLevelOption(level);
 
       const inventorySource = this.inventoryData.slice(-7);
-      const dates = inventorySource.map((item) => this.formatDateLabel(item.date));
+      const dates = inventorySource.map((item) => formatAxisDateMd(item.date));
       const inventory = inventorySource.map((item) => item.inventory || 0);
 
       const option = {
@@ -204,7 +201,8 @@ export default {
       const delta = this.trendDelta;
       const max = Math.max(this.safetyLine * 2, v * 1.2, 0.5);
       const good = v > this.safetyLine;
-      const deltaColor = delta >= 0 ? "#4caf50" : "#f44336";
+      /* 日增减不与红绿「好坏」强绑定（需结合安全线水位），仅用中性色提示波动 */
+      const deltaColor = "#90a4ae";
       const arrow = delta >= 0 ? "↑" : "↓";
 
       const option = {
@@ -212,7 +210,7 @@ export default {
         title: {
           text: `库存安全水位 · 安全线 ${this.safetyLine.toFixed(
             2
-          )} 万吨（柱右为较上日增减）`,
+          )} 万吨（柱右为较上日增减，万吨；绿/红柱仅对比安全线）`,
           subtext: "",
           ...panelTitleModule,
           ...panelCaptionBottomCenter,

@@ -110,3 +110,29 @@ export const panelLegendStandard = {
     fontSize: PANEL_LEGEND_FONT_SIZE,
   },
 };
+
+/**
+ * 时间类 X 轴统一为 月/日（如 3/28）。
+ * 对 YYYY-MM-DD 按本地日历解析，避免仅日期串被当作 UTC 导致差一天。
+ */
+export function formatAxisDateMd(dateText) {
+  if (dateText == null || dateText === "") return "";
+  if (dateText instanceof Date) {
+    const d = dateText;
+    if (Number.isNaN(d.getTime())) return "";
+    return `${d.getMonth() + 1}/${d.getDate()}`;
+  }
+  if (typeof dateText === "string") {
+    const m = dateText.trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (m) {
+      const y = Number(m[1]);
+      const mo = Number(m[2]);
+      const day = Number(m[3]);
+      const d = new Date(y, mo - 1, day);
+      return `${d.getMonth() + 1}/${d.getDate()}`;
+    }
+  }
+  const d = new Date(dateText);
+  if (Number.isNaN(d.getTime())) return String(dateText);
+  return `${d.getMonth() + 1}/${d.getDate()}`;
+}

@@ -1,7 +1,15 @@
 <template>
   <div class="panel-section">
     <ModulePanelTitle>缺陷分布解释</ModulePanelTitle>
-    <div class="defect-chart" ref="defectBar"></div>
+    <div class="defect-summary">
+      <div class="chart-cell">
+        <div class="defect-chart" ref="defectBar"></div>
+      </div>
+      <div class="chart-cell">
+        <div class="cell-caption">近7日缺陷总量走势</div>
+        <div class="defect-trend-chart" ref="defectTrend"></div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -15,6 +23,7 @@ import {
   panelTitleModule,
   panelCaptionBottomCenter,
   panelLegendStandard,
+  formatAxisDateMd,
 } from "../utils/echarts";
 import { observeElementsForResize } from "@/utils/chartResizeObserver";
 import ModulePanelTitle from "./ModulePanelTitle.vue";
@@ -34,15 +43,45 @@ export default {
   },
   data() {
     return {
+      barChart: null,
+      trendChart: null,
       _stopResizeObs: null,
     };
   },
+  computed: {
+    latestDefect() {
+      if (!this.defectData || this.defectData.length === 0) return null;
+      return this.defectData[this.defectData.length - 1];
+    },
+    defectBarSeries() {
+      const defects = this.latestDefect?.defects || [];
+      const filtered = defects.filter((d) => (d.value || 0) > 0);
+      const top = filtered.slice(0, 5);
+      return {
+        categories: top.map((d) => d.name),
+        values: top.map((d) => d.value),
+      };
+    },
+    defectSeriesSlice() {
+      const raw = this.defectData || [];
+      const sorted = [...raw].sort(
+        (a, b) => new Date(a.date) - new Date(b.date)
+      );
+      return sorted.slice(-7);
+    },
+    trendDates() {
+      return this.defectSeriesSlice.map((x) => formatAxisDateMd(x.date));
+    },
+    trendTotals() {
+      return this.defectSeriesSlice.map((x) => Number(x.total) || 0);
+    },
+  },
   mounted() {
-    this.initChart();
+    this.initCharts();
     window.addEventListener("resize", this.handleResize);
     this.$nextTick(() => {
       this._stopResizeObs = observeElementsForResize(
-        this.$refs.defectBar,
+        [this.$refs.defectBar, this.$refs.defectTrend],
         this.handleResize
       );
     });
@@ -51,19 +90,25 @@ export default {
     window.removeEventListener("resize", this.handleResize);
     if (this._stopResizeObs) this._stopResizeObs();
     this._stopResizeObs = null;
-    if (this.barChart) this.barChart.dispose();
-    this.barChart = null;
+    if (this.barChart) {
+      this.barChart.dispose();
+      this.barChart = null;
+    }
+    if (this.trendChart) {
+      this.trendChart.dispose();
+      this.trendChart = null;
+    }
   },
   watch: {
     qualityData: {
       handler() {
-        this.initChart();
+        this.initCharts();
       },
       deep: true,
     },
     defectData: {
       handler() {
-        this.initChart();
+        this.initCharts();
       },
       deep: true,
     },
@@ -76,7 +121,18 @@ export default {
       });
       return this.barChart;
     },
-    initChart() {
+    getOrCreateTrendChart() {
+      if (this.trendChart) return this.trendChart;
+      this.trendChart = echarts.init(this.$refs.defectTrend, null, {
+        theme: darkTheme,
+      });
+      return this.trendChart;
+    },
+    initCharts() {
+      this.initBarChart();
+      this.initTrendChart();
+    },
+    initBarChart() {
       if (!this.$refs.defectBar) return;
       const chart = this.getOrCreateBarChart();
       const { categories, values } = this.defectBarSeries;
@@ -180,23 +236,124 @@ export default {
         }
       });
     },
+    initTrendChart() {
+      if (!this.$refs.defectTrend) return;
+      const chart = this.getOrCreateTrendChart();
+      const dates = this.trendDates;
+      const totals = this.trendTotals;
+      if (!dates.length) {
+        chart.setOption(
+          {
+            graphic: [
+              {
+                type: "text",
+                left: "center",
+                top: "middle",
+                style: {
+                  text: "暂无趋势数据",
+                  fill: "#6b7a94",
+                  fontSize: 11,
+                },
+              },
+            ],
+            xAxis: [{ show: false }],
+            yAxis: [{ show: false }],
+            series: [],
+          },
+          true
+        );
+        this.$nextTick(() => {
+          try {
+            chart.resize();
+          } catch (e) {
+            /* ignore */
+          }
+        });
+        return;
+      }
+      chart.setOption(
+        {
+          graphic: [],
+          tooltip: {
+            ...panelTooltipAxis,
+            axisPointer: panelAxisPointerLine,
+            formatter: (params) => {
+              const p = params?.[0];
+              if (!p) return "";
+              return `${p.marker} <b>${p.axisValue}</b><br/>缺陷合计 ${Number(
+                p.data
+              ).toFixed(0)} 吨`;
+            },
+          },
+          grid: { left: 8, right: 8, top: 6, bottom: 20, containLabel: false },
+          xAxis: [
+            {
+              type: "category",
+              data: dates,
+              axisTick: { show: false },
+              axisLine: { lineStyle: { color: "rgba(255,255,255,0.1)" } },
+              axisLabel: { color: "#9aa8bf", fontSize: 9, interval: 0 },
+            },
+          ],
+          yAxis: [
+            {
+              type: "value",
+              min: 0,
+              splitNumber: 2,
+              axisLabel: {
+                color: "#9aa8bf",
+                fontSize: 9,
+                formatter: (v) => `${Math.round(v)}`,
+              },
+              splitLine: panelSplitLine,
+            },
+          ],
+          series: [
+            {
+              name: "缺陷总量",
+              type: "line",
+              data: totals,
+              smooth: 0.35,
+              symbol: "circle",
+              symbolSize: 4,
+              showSymbol: dates.length <= 10,
+              itemStyle: { color: "#7c9dff" },
+              lineStyle: {
+                width: 2,
+                color: "#7c9dff",
+                shadowColor: "rgba(124,157,255,0.35)",
+                shadowBlur: 6,
+              },
+              areaStyle: {
+                color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                  { offset: 0, color: "rgba(124, 157, 255, 0.28)" },
+                  { offset: 1, color: "rgba(124, 157, 255, 0.02)" },
+                ]),
+              },
+            },
+          ],
+        },
+        true
+      );
+      this.$nextTick(() => {
+        try {
+          chart.resize();
+        } catch (e) {
+          /* ignore */
+        }
+      });
+    },
     handleResize() {
-      if (this.barChart) this.barChart.resize();
-    },
-  },
-  computed: {
-    latestDefect() {
-      if (!this.defectData || this.defectData.length === 0) return null;
-      return this.defectData[this.defectData.length - 1];
-    },
-    defectBarSeries() {
-      const defects = this.latestDefect?.defects || [];
-      const filtered = defects.filter((d) => (d.value || 0) > 0);
-      const top = filtered.slice(0, 5);
-      return {
-        categories: top.map((d) => d.name),
-        values: top.map((d) => d.value),
-      };
+      try {
+        if (this.barChart) this.barChart.resize();
+      } catch (e) {
+        /* ignore */
+      }
+      try {
+        if (this.trendChart) this.trendChart.resize();
+      } catch (e) {
+        /* ignore */
+      }
     },
   },
 };
@@ -208,8 +365,49 @@ export default {
 .panel-section {
   .dashboard-panel-section-core();
 
-  .defect-chart {
-    .dashboard-flex-chart-host();
+  .defect-summary {
+    display: flex;
+    gap: 10px;
+    align-items: stretch;
+    justify-content: center;
+    flex: 1 1 0;
+    min-height: 0;
+  }
+
+  .chart-cell {
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.12);
+    padding: 4px;
+    box-sizing: border-box;
+
+    &:first-child {
+      border-right: 1px solid rgba(55, 76, 98, 0.45);
+      margin-right: 2px;
+      padding-right: 8px;
+    }
+  }
+
+  .cell-caption {
+    flex-shrink: 0;
+    text-align: center;
+    font-size: 10px;
+    font-weight: 600;
+    color: #9eb1cc;
+    letter-spacing: 0.02em;
+    padding: 2px 4px 4px;
+    line-height: 1.2;
+  }
+
+  .defect-chart,
+  .defect-trend-chart {
+    width: 100%;
+    flex: 1;
+    min-height: 0;
   }
 }
 </style>

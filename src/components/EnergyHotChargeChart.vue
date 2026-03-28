@@ -47,6 +47,7 @@ import {
   panelTitleModule,
   panelCaptionBottomCenter,
   panelLegendStandard,
+  formatAxisDateMd,
 } from "../utils/echarts";
 import { DASHBOARD_CONSTANTS } from "@/config/dashboardConstants";
 import { observeElementsForResize } from "@/utils/chartResizeObserver";
@@ -99,10 +100,6 @@ export default {
     },
   },
   methods: {
-    formatDateLabel(dateText) {
-      const date = new Date(dateText);
-      return `${date.getMonth() + 1}月${date.getDate()}日`;
-    },
     getOrCreateTrendChart() {
       if (this.trendChart) return this.trendChart;
       this.trendChart = echarts.init(this.$refs.energyChart, null, {
@@ -135,7 +132,7 @@ export default {
       this.updateMiniGauges(hotGauge, gasGauge);
 
       const source = this.energyData.slice(-7);
-      const dates = source.map((item) => this.formatDateLabel(item.date));
+      const dates = source.map((item) => formatAxisDateMd(item.date));
       const hotChargeRate = source.map((item) => item.hot_charge_rate || 0);
       const gasConsumption = source.map((item) => item.gas_consumption || 0);
 

@@ -8,11 +8,9 @@
     </div>
     <div class="header-right">
       <div class="info-section">
-        <div class="time-info">{{ fullTimeInfo }}</div>
-        <div class="weather-info">
-          <span>{{ weatherCity }}</span>
-          <span class="weather-icon">☀️</span>
-          <span>{{ weatherText }}</span>
+        <div class="info-line time-line">{{ fullTimeInfo }}</div>
+        <div class="info-line weather-line">
+          {{ weatherCity }} <span class="weather-emoji">{{ weatherEmoji }}</span> {{ weatherText }}
         </div>
       </div>
     </div>
@@ -20,27 +18,53 @@
 </template>
 
 <script>
+import {
+  DEFAULT_ANSHAN_COORDS,
+  fetchOpenMeteoCurrent,
+} from "../utils/weatherService";
+
+const WEATHER_REFRESH_MS = 10 * 60 * 1000;
+
+function parseEnvCoord(val, fallback) {
+  if (val === undefined || val === "") return fallback;
+  const n = Number(val);
+  return Number.isFinite(n) ? n : fallback;
+}
+
 export default {
   name: "AppHeader",
   data() {
     return {
       fullTimeInfo: "",
       timer: null,
+      weatherTimer: null,
+      weatherEmoji: "⏳",
       headerTitle:
         process.env.VUE_APP_HEADER_TITLE ||
         "鞍钢股份有限公司热轧带钢厂2150线数据化大屏运营决策平台",
       weatherCity: process.env.VUE_APP_WEATHER_CITY || "鞍山",
-      weatherText: process.env.VUE_APP_WEATHER_TEXT || "晴 15°C",
+      weatherText: "天气加载中…",
+      weatherFallbackText:
+        process.env.VUE_APP_WEATHER_TEXT || "晴 15°C",
     };
   },
   mounted() {
     this.updateDateTime();
     this.timer = setInterval(this.updateDateTime, 1000);
+    this.refreshWeather();
+    this.weatherTimer = setInterval(
+      this.refreshWeather,
+      WEATHER_REFRESH_MS
+    );
   },
   beforeDestroy() {
     if (this.timer) {
       clearInterval(this.timer);
       this.timer = null;
+    }
+    if (this.weatherTimer) {
+      clearInterval(this.weatherTimer);
+      this.weatherTimer = null;
     }
   },
   methods: {
@@ -56,6 +80,28 @@ export default {
       const seconds = now.getSeconds().toString().padStart(2, "0");
 
       this.fullTimeInfo = `${year}年${month}月${day}日 ${weekDay} ${hours}:${minutes}:${seconds}`;
+    },
+    weatherCoords() {
+      return {
+        latitude: parseEnvCoord(
+          process.env.VUE_APP_WEATHER_LAT,
+          DEFAULT_ANSHAN_COORDS.latitude
+        ),
+        longitude: parseEnvCoord(
+          process.env.VUE_APP_WEATHER_LON,
+          DEFAULT_ANSHAN_COORDS.longitude
+        ),
+      };
+    },
+    async refreshWeather() {
+      try {
+        const data = await fetchOpenMeteoCurrent(this.weatherCoords());
+        this.weatherEmoji = data.emoji;
+        this.weatherText = data.line;
+      } catch {
+        this.weatherEmoji = "☁️";
+        this.weatherText = this.weatherFallbackText;
+      }
     },
   },
 };
@@ -117,23 +163,31 @@ export default {
       display: flex;
       flex-direction: column;
       align-items: flex-end;
-      gap: 4px;
+      gap: 8px;
+      text-align: right;
 
-      .time-info {
+      .info-line {
+        text-align: right;
+        line-height: 1.35;
+        white-space: nowrap;
+      }
+
+      .time-line {
         font-size: 16px;
         font-weight: bold;
         color: #e6e9f0;
       }
 
-      .weather-info {
-        display: flex;
-        align-items: center;
-        gap: 8px;
+      .weather-line {
         font-size: 14px;
+        font-weight: 500;
+        color: #e6e9f0;
+      }
 
-        .weather-icon {
-          font-size: 16px;
-        }
+      .weather-emoji {
+        font-size: 16px;
+        line-height: 1;
+        vertical-align: -0.05em;
       }
     }
   }

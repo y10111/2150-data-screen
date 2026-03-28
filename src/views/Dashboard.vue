@@ -6,28 +6,53 @@
         <KPICard :data="kpi" />
       </el-col>
     </section>
-    <PanelFrame class="panel left-panel" borderComponent="dv-border-box-1" stacked>
-      <DeviceAccidentChart
-        :qualityData="qualityData"
-      />
-      <QualityYieldChart :qualityData="qualityData" :defectData="defectData" />
-    </PanelFrame>
+    <div class="panel left-panel panel-stack">
+      <dv-border-box-1 class="side-border-cell">
+        <div class="side-border-inner">
+          <DeviceAccidentChart :qualityData="qualityData" />
+        </div>
+      </dv-border-box-1>
+      <dv-border-box-1 class="side-border-cell">
+        <div class="side-border-inner">
+          <QualityYieldChart
+            :qualityData="qualityData"
+            :defectData="defectData"
+          />
+        </div>
+      </dv-border-box-1>
+    </div>
     <PanelFrame class="panel center-panel" borderComponent="dv-border-box-2" stacked>
       <CenterChart :productionData="trendData" />
     </PanelFrame>
-    <PanelFrame class="panel right-panel" borderComponent="dv-border-box-1" stacked>
-      <EnergyHotChargeChart :energyData="energyData" />
-      <InventoryDeliveryChart
-        :inventoryData="inventoryData"
-        :energyData="energyData"
-      />
-    </PanelFrame>
-    <PanelFrame
-      class="dashboard-section alert-section"
-      borderComponent="dv-border-box-1"
-    >
-      <AIAssistant :alerts="aiAlerts" />
-    </PanelFrame>
+    <div class="panel right-panel panel-stack">
+      <dv-border-box-1 class="side-border-cell">
+        <div class="side-border-inner">
+          <EnergyHotChargeChart :energyData="energyData" />
+        </div>
+      </dv-border-box-1>
+      <dv-border-box-1 class="side-border-cell">
+        <div class="side-border-inner">
+          <InventoryDeliveryChart
+            :inventoryData="inventoryData"
+            :energyData="energyData"
+          />
+        </div>
+      </dv-border-box-1>
+    </div>
+    <section class="dashboard-section ai-row-section">
+      <div class="ai-row-grid">
+        <dv-border-box-7 class="ai-border-cell">
+          <div class="ai-border-inner">
+            <DeviceHealthStrip :deviceTimeline="deviceData" />
+          </div>
+        </dv-border-box-7>
+        <dv-border-box-7 class="ai-border-cell">
+          <div class="ai-border-inner">
+            <AIAssistant :alerts="aiAlerts" />
+          </div>
+        </dv-border-box-7>
+      </div>
+    </section>
     <Footer class="dashboard-footer" />
   </main>
 </template>
@@ -48,6 +73,7 @@ import InventoryDeliveryChart from "@/components/InventoryDeliveryChart.vue";
 import PanelFrame from "@/components/PanelFrame.vue";
 // 导入AI智能预警组件
 import AIAssistant from "@/components/AIAssistant.vue";
+import DeviceHealthStrip from "@/components/DeviceHealthStrip.vue";
 // 导入仪表板API接口
 import { dashboardApi } from "@/api";
 import { DASHBOARD_CONSTANTS } from "@/config/dashboardConstants";
@@ -66,6 +92,7 @@ export default {
     InventoryDeliveryChart,
     PanelFrame,
     AIAssistant,
+    DeviceHealthStrip,
   },
   // 组件数据
   data() {
@@ -93,8 +120,15 @@ export default {
     // 调用数据获取方法
     this.fetchAllData();
   },
-  // 组件方法
   methods: {
+    mapAiAlertType(type) {
+      const t = String(type || "").toLowerCase();
+      if (t === "info") return "预测信息";
+      if (t === "warning") return "预警";
+      if (t === "alert") return "根因分析";
+      if (t === "suggestion" || t === "optimize") return "优化建议";
+      return "预警";
+    },
     normalizeListResponse(payload) {
       if (Array.isArray(payload)) {
         return payload;
@@ -153,13 +187,41 @@ export default {
           // 获取前一天的KPI数据（数组倒数第二个元素），用于计算趋势
           const previousKpi = kpiData[kpiData.length - 2];
 
-          // 计算趋势值
+          // 环比：与 KPI 序列中「上一日」对比，展示统一标注「较昨日」
           const calculateTrend = (current, previous) => {
-            // 如果没有前一天的值，返回0
-            if (!previous) return 0;
-            // 计算百分比变化并保留一位小数
-            return (((current - previous) / previous) * 100).toFixed(1) * 1;
+            if (previous === undefined || previous === null) return 0;
+            const p = Number(previous);
+            const c = Number(current);
+            if (!Number.isFinite(p) || Math.abs(p) < 1e-12) return 0;
+            return +(((c - p) / p) * 100).toFixed(1);
           };
+
+          const invCurrN = Number(latestKpi.inventory);
+          const invPrevRaw = previousKpi?.inventory;
+          const invPrevN =
+            invPrevRaw !== undefined && invPrevRaw !== null
+              ? Number(invPrevRaw)
+              : null;
+          const invMoMMinBase =
+            DASHBOARD_CONSTANTS.inventoryMoMPercentMinBase;
+          let invTrendDetail = null;
+          let invTrend = calculateTrend(latestKpi.inventory, invPrevRaw);
+          if (
+            invPrevN != null &&
+            Number.isFinite(invPrevN) &&
+            Math.abs(invPrevN) < invMoMMinBase
+          ) {
+            const dWan = invCurrN - invPrevN;
+            const dTons = Math.round(dWan * 10000);
+            invTrendDetail = `${dTons >= 0 ? "↑ " : "↓ "}${Math.abs(
+              dTons
+            )} 吨`;
+            invTrend = 0;
+          }
+          const invTonsDisplay =
+            Number.isFinite(invCurrN) && invCurrN >= 0
+              ? String(Math.round(invCurrN * 10000))
+              : "—";
 
           // 构建KPI列表，包含8个关键指标
           this.kpiList = [
@@ -171,7 +233,7 @@ export default {
                 latestKpi.today_actual,
                 previousKpi?.today_actual
               ),
-              // 如果实际产量低于计划产量，显示警告
+              trendBaseline: "较昨日",
               warning: latestKpi.today_actual < latestKpi.today_plan,
             },
             {
@@ -182,7 +244,7 @@ export default {
                 latestKpi.completion_rate,
                 previousKpi?.completion_rate
               ),
-              // 如果完成率低于100%，显示警告
+              trendBaseline: "较昨日",
               warning: latestKpi.completion_rate < 100,
             },
             {
@@ -193,7 +255,7 @@ export default {
                 latestKpi.yield_rate,
                 previousKpi?.yield_rate
               ),
-              // 如果成材率低于98%，显示警告
+              trendBaseline: "较昨日",
               warning: latestKpi.yield_rate < DASHBOARD_CONSTANTS.yieldWarning,
             },
             {
@@ -204,7 +266,7 @@ export default {
                 latestKpi.hot_charge_rate,
                 previousKpi?.hot_charge_rate
               ),
-              // 如果热装率低于50%，显示警告
+              trendBaseline: "较昨日",
               warning:
                 latestKpi.hot_charge_rate < DASHBOARD_CONSTANTS.hotChargeWarning,
             },
@@ -216,9 +278,10 @@ export default {
                 latestKpi.gas_consumption,
                 previousKpi?.gas_consumption
               ),
-              // 如果煤气单耗超过1.2，显示警告
+              trendBaseline: "较昨日",
               warning:
-                latestKpi.gas_consumption > DASHBOARD_CONSTANTS.gasConsumptionWarning,
+                latestKpi.gas_consumption >
+                DASHBOARD_CONSTANTS.gasConsumptionWarning,
             },
             {
               name: "质量封锁",
@@ -228,7 +291,7 @@ export default {
                 latestKpi.quality_lock,
                 previousKpi?.quality_lock
               ),
-              // 如果质量封锁超过50卷，显示警告
+              trendBaseline: "较昨日",
               warning:
                 latestKpi.quality_lock > DASHBOARD_CONSTANTS.qualityLockWarning,
             },
@@ -240,19 +303,19 @@ export default {
                 latestKpi.device_downtime,
                 previousKpi?.device_downtime
               ),
-              // 如果设备事故时间超过2小时，显示警告
+              trendBaseline: "较昨日",
               warning:
-                latestKpi.device_downtime > DASHBOARD_CONSTANTS.deviceDowntimeWarning,
+                latestKpi.device_downtime >
+                DASHBOARD_CONSTANTS.deviceDowntimeWarning,
             },
             {
               name: "钢坯库存",
-              value: latestKpi.inventory,
-              unit: "万吨",
-              trend: calculateTrend(
-                latestKpi.inventory,
-                previousKpi?.inventory
-              ),
-              // 如果钢坯库存低于0.5万吨，显示警告
+              value: invTonsDisplay,
+              unit: "吨",
+              trend: invTrendDetail ? 0 : invTrend,
+              trendDetail: invTrendDetail || undefined,
+              trendBaseline: "较昨日",
+              neutralTrend: true,
               warning:
                 latestKpi.inventory < DASHBOARD_CONSTANTS.inventoryLowWarning,
             },
@@ -277,22 +340,14 @@ export default {
           this.defectData = defectData;
         }
 
-        // 处理AI预警数据
+        // 处理AI预警数据（同日可多条：预警 / 根因 / 预测等）
         if (aiAlertsData.length > 0) {
-          // 获取最新的预警数据
           const latestAlerts = aiAlertsData[aiAlertsData.length - 1];
-          // 转换预警数据格式
           this.aiAlerts = latestAlerts.alerts.map((alert) => ({
             id: alert.id,
-            // 根据预警类型转换为中文显示
-            type:
-              alert.type === "info"
-                ? "预测信息"
-                : alert.type === "warning"
-                ? "预警"
-                : "根因分析",
+            type: this.mapAiAlertType(alert.type),
+            title: alert.title || "",
             content: alert.message,
-            // 设置预警时间
             time: `${latestAlerts.date} 10:00:00`,
           }));
         }
@@ -336,7 +391,8 @@ export default {
   min-height: 100vh;
   display: grid;
   grid-template-columns: 1fr 2fr 1fr;
-  grid-template-rows: auto 120px minmax(0, 1fr) auto auto;
+  /* 第四行限高，避免挤压中间产量主图区域 */
+  grid-template-rows: auto 120px minmax(0, 1fr) minmax(0, min(200px, 28vh)) auto;
   gap: 16px;
   padding: 16px;
   box-sizing: border-box;
@@ -354,9 +410,97 @@ export default {
     grid-row: 2;
   }
 
-  .alert-section {
+  .ai-row-section {
     grid-column: 1 / -1;
     grid-row: 4;
+    min-height: 0;
+    max-height: min(200px, 28vh);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .ai-row-grid {
+    display: grid;
+    /* 设备健康 / AI 预警 同宽，各占一半 */
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 12px;
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+    align-items: stretch;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  .ai-border-cell {
+    min-width: 0;
+    min-height: 0;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .ai-border-inner {
+    height: 100%;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    padding: 4px 6px 8px;
+    box-sizing: border-box;
+  }
+
+  .ai-border-inner :deep(.health-section),
+  .ai-border-inner :deep(.ai-assistant) {
+    flex: 1;
+    min-height: 0;
+  }
+
+  .ai-border-cell :deep(.border-box-content) {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  /* 左/右栏：各子模块单独 dv-border-box-1 */
+  .panel-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    box-sizing: border-box;
+  }
+
+  .side-border-cell {
+    flex: 1;
+    min-height: 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .side-border-inner {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    padding: 8px 10px 12px;
+    box-sizing: border-box;
+  }
+
+  .side-border-cell :deep(.border-box-content) {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .side-border-inner :deep(.panel-section) {
+    flex: 1;
+    min-height: 0;
   }
 
   .dashboard-header {

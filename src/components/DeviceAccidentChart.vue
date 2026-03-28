@@ -24,6 +24,7 @@ import {
   panelLegendStandard,
   panelTitleModule,
   panelCaptionBottomCenter,
+  formatAxisDateMd,
 } from "../utils/echarts";
 import { DASHBOARD_CONSTANTS } from "@/config/dashboardConstants";
 import { observeElementsForResize } from "@/utils/chartResizeObserver";
@@ -305,10 +306,7 @@ export default {
       const chart = this.getOrCreateGaugeChart();
       if (!chart) return;
       const source = this.qualityData.slice(-7);
-      const dates = source.map((x) => {
-        const d = new Date(x.date);
-        return `${d.getMonth() + 1}/${d.getDate()}`;
-      });
+      const dates = source.map((x) => formatAxisDateMd(x.date));
       const hours = source.map((x) => Number(x.device_downtime) || 0);
 
       const warnH = DASHBOARD_CONSTANTS.deviceDowntimeWarning;

@@ -12,6 +12,7 @@ import {
   panelTitleModule,
   panelCaptionBottomCenter,
   panelLegendStandard,
+  formatAxisDateMd,
 } from "../utils/echarts";
 import { observeElementsForResize } from "@/utils/chartResizeObserver";
 import ModulePanelTitle from "./ModulePanelTitle.vue";
@@ -31,13 +32,28 @@ export default {
     };
   },
   computed: {
-    totalUnderproduction() {
-      if (!this.productionData || this.productionData.length === 0) return 0;
-      return this.productionData
-        .reduce((total, item) => {
-          return total + (item.today_actual - item.today_plan);
-        }, 0)
-        .toFixed(0);
+    /** 副标题：欠产/超产用非负吨数 + 千分位，避免「-18067」歧义 */
+    productionBalanceSubtext() {
+      if (!this.productionData || this.productionData.length === 0) {
+        return "计划与实轧对比：暂无数据";
+      }
+      const sum = this.productionData.reduce(
+        (total, item) =>
+          total + (item.today_actual || 0) - (item.today_plan || 0),
+        0
+      );
+      const rounded = Math.round(sum);
+      const absStr = Math.abs(rounded).toLocaleString("zh-CN");
+      const hi = this.maxProduction;
+      const lo = this.minProduction;
+      if (rounded < 0) {
+        return `计划与实轧对比：累计欠产 ${absStr} 吨（最高 ${hi} 吨，最低 ${lo} 吨）`;
+      }
+      if (rounded > 0) {
+        const posStr = rounded.toLocaleString("zh-CN");
+        return `计划与实轧对比：累计超产 ${posStr} 吨（最高 ${hi} 吨，最低 ${lo} 吨）`;
+      }
+      return `计划与实轧对比：计划与实轧累计持平（最高 ${hi} 吨，最低 ${lo} 吨）`;
     },
     maxProduction() {
       if (!this.productionData || this.productionData.length === 0) return 0;
@@ -75,10 +91,6 @@ export default {
     },
   },
   methods: {
-    formatDateLabel(dateText) {
-      const date = new Date(dateText);
-      return `${date.getMonth() + 1}月${date.getDate()}日`;
-    },
     getOrCreateChart() {
       if (this.productionChart) {
         return this.productionChart;
@@ -94,9 +106,9 @@ export default {
       const chart = this.getOrCreateChart();
 
       // 处理生产数据
-      const dates = this.productionData.map((item) => {
-        return this.formatDateLabel(item.date);
-      });
+      const dates = this.productionData.map((item) =>
+        formatAxisDateMd(item.date)
+      );
 
       const planProduction = this.productionData.map((item) => item.today_plan);
       const actualProduction = this.productionData.map(
@@ -111,7 +123,7 @@ export default {
         color: ["#ff9800", "#4caf50"],
         title: {
           text: "",
-          subtext: `计划与实轧对比：累计欠产 ${this.totalUnderproduction} 吨（最高 ${this.maxProduction} 吨，最低 ${this.minProduction} 吨）`,
+          subtext: this.productionBalanceSubtext,
           ...panelTitleModule,
           ...panelCaptionBottomCenter,
         },
