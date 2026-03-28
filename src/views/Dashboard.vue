@@ -150,35 +150,57 @@ export default {
     // 获取所有仪表板数据
     async fetchAllData() {
       try {
-        // 并发请求所有API接口
-        const [
-          kpiRes,
-          trendRes,
-          inventoryRes,
-          defectRes,
-          aiAlertsRes,
-          deviceHealthRes,
-        ] = await Promise.all([
-          // 获取KPI数据
+        // KPI 等仍走 Mock/代理；任一路失败不再拖死整屏（Promise.all 会全挂）
+        const settled = await Promise.allSettled([
           dashboardApi.getKpiData(),
-          // 获取趋势数据
           dashboardApi.getTrendData(),
-          // 获取库存数据
           dashboardApi.getInventoryData(),
-          // 获取缺陷数据
           dashboardApi.getDefectData(),
-          // 获取AI预警数据
-          dashboardApi.getAiAlerts(),
-          // 获取设备健康数据
           dashboardApi.getDeviceHealth(),
         ]);
+        const pickSettled = (idx, label) => {
+          const r = settled[idx];
+          if (r.status === "fulfilled") return r.value;
+          console.warn(
+            `[Dashboard] ${label} 请求失败:`,
+            r.reason && r.reason.message ? r.reason.message : r.reason
+          );
+          return null;
+        };
+        const kpiRes = pickSettled(0, "kpi");
+        const trendRes = pickSettled(1, "trend");
+        const inventoryRes = pickSettled(2, "inventory");
+        const defectRes = pickSettled(3, "defect");
+        const deviceHealthRes = pickSettled(4, "deviceHealth");
 
-        const kpiData = this.normalizeListResponse(kpiRes);
-        const trendData = this.normalizeListResponse(trendRes);
-        const inventoryData = this.normalizeListResponse(inventoryRes);
-        const defectData = this.normalizeListResponse(defectRes);
-        const aiAlertsData = this.normalizeListResponse(aiAlertsRes);
-        const deviceHealthData = this.normalizeListResponse(deviceHealthRes);
+        const loadMockData = (key) => {
+          try {
+            const mod =
+              {
+                daily: require("@/mock/data/dailyOperations.json"),
+                inventory: require("@/mock/data/inventoryTimeline.json"),
+                defect: require("@/mock/data/qualityDefects.json"),
+                device: require("@/mock/data/deviceHealthTimeline.json"),
+              }[key];
+            return Array.isArray(mod && mod.data) ? mod.data : [];
+          } catch (_) {
+            return [];
+          }
+        };
+
+        let kpiData = this.normalizeListResponse(kpiRes);
+        let trendData = this.normalizeListResponse(trendRes);
+        let inventoryData = this.normalizeListResponse(inventoryRes);
+        let defectData = this.normalizeListResponse(defectRes);
+        let deviceHealthData = this.normalizeListResponse(deviceHealthRes);
+
+        if (!kpiData.length) kpiData = loadMockData("daily");
+        if (!trendData.length) {
+          trendData = kpiData.length ? kpiData : loadMockData("daily");
+        }
+        if (!inventoryData.length) inventoryData = loadMockData("inventory");
+        if (!defectData.length) defectData = loadMockData("defect");
+        if (!deviceHealthData.length) deviceHealthData = loadMockData("device");
 
         // 处理KPI数据
         if (kpiData.length > 0) {
@@ -340,18 +362,6 @@ export default {
           this.defectData = defectData;
         }
 
-        // 处理AI预警数据（同日可多条：预警 / 根因 / 预测等）
-        if (aiAlertsData.length > 0) {
-          const latestAlerts = aiAlertsData[aiAlertsData.length - 1];
-          this.aiAlerts = latestAlerts.alerts.map((alert) => ({
-            id: alert.id,
-            type: this.mapAiAlertType(alert.type),
-            title: alert.title || "",
-            content: alert.message,
-            time: `${latestAlerts.date} 10:00:00`,
-          }));
-        }
-
         // 处理设备健康数据
         if (deviceHealthData.length > 0) {
           // 保存设备健康数据
@@ -374,6 +384,39 @@ export default {
           gas_consumption: item.gas_consumption,
           delivery: item.delivery,
         }));
+
+        // AI 预警必须放在 KPI/图表之后：本地 Qwen 推理可能数分钟，先前 await 会导致整屏空白
+        let aiAlertsData = [];
+        try {
+          const aiAlertsRes = await dashboardApi.getAiAlerts();
+          aiAlertsData = this.normalizeListResponse(aiAlertsRes);
+        } catch (e) {
+          console.warn(
+            "[AI] 本地预警服务不可用（请启动 screen_ai_service :5001）:",
+            e && e.message ? e.message : e
+          );
+        }
+        if (!aiAlertsData.length) {
+          try {
+            const raw = require("@/mock/data/aiAlertTimeline.json");
+            const arr = Array.isArray(raw.data) ? raw.data : [];
+            if (arr.length) aiAlertsData = [arr[arr.length - 1]];
+          } catch (_) {
+            /* ignore */
+          }
+        }
+        if (aiAlertsData.length > 0) {
+          const latestAlerts = aiAlertsData[aiAlertsData.length - 1];
+          const rawAlerts = latestAlerts && latestAlerts.alerts;
+          const list = Array.isArray(rawAlerts) ? rawAlerts : [];
+          this.aiAlerts = list.map((alert) => ({
+            id: alert.id,
+            type: this.mapAiAlertType(alert.type),
+            title: alert.title || "",
+            content: alert.message,
+            time: `${latestAlerts.date} 10:00:00`,
+          }));
+        }
       } catch (error) {
         // 捕获并输出错误信息
         console.error("获取数据失败:", error);

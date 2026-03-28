@@ -108,7 +108,8 @@ export default {
     justify-content: center;
     align-items: center;
     flex-wrap: nowrap;
-    gap: 0.35em;
+    /* 较昨日 · ↑ 36.1% · ⚠️ 分段留白 */
+    gap: 6px;
     font-size: 12px;
     line-height: 1.35;
     white-space: nowrap;

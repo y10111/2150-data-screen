@@ -9,8 +9,9 @@ export const dashboardApi = {
   getInventoryData: () => request.get("/dashboard/inventory"),
   // 获取缺陷数据
   getDefectData: () => request.get("/dashboard/defect"),
-  // 获取AI预警数据
-  getAiAlerts: () => request.get("/dashboard/ai/alerts"),
+  // 获取AI预警数据（本地 LLM 生成较慢，单独延长超时）
+  getAiAlerts: () =>
+    request.get("/dashboard/ai/alerts", { timeout: 600000 }),
   // 获取设备健康数据
   getDeviceHealth: () => request.get("/dashboard/device/health"),
 };

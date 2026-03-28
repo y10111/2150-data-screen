@@ -21,3 +21,34 @@ pnpm-debug.log*
 *.njsproj
 *.sln
 *.sw?
+
+# Python（全仓库通用；若文件曾被 git add/commit，.gitignore 不会自动取消跟踪，
+# 需执行：git rm -r --cached screen_ai_service/models screen_ai_service/venv … 再提交）
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+env/
+ENV/
+*.egg
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+*.cover
+.python-version
+
+# screen_ai_service：显式路径（避免误以为「加了目录却没被忽略」）
+screen_ai_service/models/
+screen_ai_service/venv/
+screen_ai_service/.venv/
+screen_ai_service/__pycache__/
+screen_ai_service/.env

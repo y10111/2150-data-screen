@@ -2,7 +2,6 @@ import Mock from "mockjs";
 import dailyOperationsData from "./data/dailyOperations.json";
 import inventoryTimelineData from "./data/inventoryTimeline.json";
 import qualityDefectsData from "./data/qualityDefects.json";
-import aiAlertTimelineData from "./data/aiAlertTimeline.json";
 import deviceHealthTimelineData from "./data/deviceHealthTimeline.json";
 
 // Mock.setup({ timeout: "200-600" });
@@ -27,10 +26,7 @@ Mock.mock("/api/dashboard/defect", "get", {
   data: qualityDefectsData,
 });
 
-Mock.mock("/api/dashboard/ai/alerts", "get", {
-  code: 200,
-  data: aiAlertTimelineData,
-});
+// AI 预警改走本地 screen_ai_service（vue 代理 → :5001），此处不再拦截
 
 Mock.mock("/api/dashboard/device/health", "get", {
   code: 200,
