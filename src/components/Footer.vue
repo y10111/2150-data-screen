@@ -5,7 +5,7 @@
       <span class="separator">|</span>
       <span>数据说明：模拟数据（Mock.js），正式环境可对接真实接口</span>
       <span class="separator">|</span>
-      <span>技术支持：自动化二级系统</span>
+      <span>技术支持：热轧带钢厂自动化二级</span>
       <span class="separator">|</span>
       <span>版本：v1.0.0-beta</span>
     </div>
@@ -32,6 +32,8 @@ export default {
   data() {
     return {
       isFullscreen: false,
+      /** 避免连续触发全屏 API 导致「Pending operation cancelled…」未处理的 Promise 拒绝 */
+      _fullscreenBusy: false,
     };
   },
   mounted() {
@@ -65,19 +67,41 @@ export default {
         document.mozFullScreenElement ||
         document.msFullscreenElement
       );
+      this._fullscreenBusy = false;
+    },
+    getFullscreenElement() {
+      const doc = document;
+      return (
+        doc.fullscreenElement ||
+        doc.webkitFullscreenElement ||
+        doc.mozFullScreenElement ||
+        doc.msFullscreenElement
+      );
     },
     toggleFullscreen() {
-      if (!this.isFullscreen) {
-        const el = document.documentElement;
-        if (el.requestFullscreen) el.requestFullscreen();
-        else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
-        else if (el.mozRequestFullScreen) el.mozRequestFullScreen();
-        else if (el.msRequestFullscreen) el.msRequestFullscreen();
+      if (this._fullscreenBusy) return;
+      const doc = document;
+      const fsEl = this.getFullscreenElement();
+      let p = null;
+
+      if (!fsEl) {
+        const el = doc.documentElement;
+        if (el.requestFullscreen) p = el.requestFullscreen();
+        else if (el.webkitRequestFullscreen) p = el.webkitRequestFullscreen();
+        else if (el.mozRequestFullScreen) p = el.mozRequestFullScreen();
+        else if (el.msRequestFullscreen) p = el.msRequestFullscreen();
       } else {
-        if (document.exitFullscreen) document.exitFullscreen();
-        else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
-        else if (document.mozCancelFullScreen) document.mozCancelFullScreen();
-        else if (document.msExitFullscreen) document.msExitFullscreen();
+        if (doc.exitFullscreen) p = doc.exitFullscreen();
+        else if (doc.webkitExitFullscreen) p = doc.webkitExitFullscreen();
+        else if (doc.mozCancelFullScreen) p = doc.mozCancelFullScreen();
+        else if (doc.msExitFullscreen) p = doc.msExitFullscreen();
+      }
+
+      if (p && typeof p.then === "function") {
+        this._fullscreenBusy = true;
+        p.catch(() => {}).finally(() => {
+          this._fullscreenBusy = false;
+        });
       }
     },
   },

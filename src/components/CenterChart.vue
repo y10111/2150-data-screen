@@ -1,28 +1,34 @@
 <template>
   <div class="center-chart">
-    <div class="chart-header">
-      <h3 class="chart-title">产量趋势分析</h3>
-      <div class="chart-info">
-        <span class="info-item">累计欠产: {{ totalUnderproduction }}吨</span>
-        <span class="info-item">最高产量: {{ maxProduction }}吨</span>
-        <span class="info-item">最低产量: {{ minProduction }}吨</span>
-      </div>
-    </div>
+    <ModulePanelTitle>产量趋势分析</ModulePanelTitle>
     <div class="chart-container" ref="productionChart"></div>
   </div>
 </template>
 
 <script>
 import * as echarts from "echarts";
-import { darkTheme } from "../utils/echarts";
+import {
+  darkTheme,
+  panelTitleModule,
+  panelCaptionBottomCenter,
+  panelLegendStandard,
+} from "../utils/echarts";
+import { observeElementsForResize } from "@/utils/chartResizeObserver";
+import ModulePanelTitle from "./ModulePanelTitle.vue";
 
 export default {
   name: "CenterChart",
+  components: { ModulePanelTitle },
   props: {
     productionData: {
       type: Array,
       default: () => [],
     },
+  },
+  data() {
+    return {
+      _stopResizeObs: null,
+    };
   },
   computed: {
     totalUnderproduction() {
@@ -45,9 +51,17 @@ export default {
   mounted() {
     this.initProductionChart();
     window.addEventListener("resize", this.handleResize);
+    this.$nextTick(() => {
+      this._stopResizeObs = observeElementsForResize(
+        this.$refs.productionChart,
+        this.handleResize
+      );
+    });
   },
   beforeDestroy() {
     window.removeEventListener("resize", this.handleResize);
+    if (this._stopResizeObs) this._stopResizeObs();
+    this._stopResizeObs = null;
     if (this.productionChart) {
       this.productionChart.dispose();
     }
@@ -94,11 +108,18 @@ export default {
       const xLabelInterval = Math.max(1, Math.ceil(dates.length / 8));
 
       const option = {
+        color: ["#ff9800", "#4caf50"],
+        title: {
+          text: "",
+          subtext: `计划与实轧对比：累计欠产 ${this.totalUnderproduction} 吨（最高 ${this.maxProduction} 吨，最低 ${this.minProduction} 吨）`,
+          ...panelTitleModule,
+          ...panelCaptionBottomCenter,
+        },
         grid: {
           left: 55,
           right: 45,
-          top: 60,
-          bottom: 55,
+          top: 52,
+          bottom: 78,
           containLabel: true,
         },
         tooltip: {
@@ -110,11 +131,13 @@ export default {
           },
         },
         legend: {
-          data: ["计划产量", "实轧产量"],
-          top: 10,
-          left: "center",
-          textStyle: { color: "#8c9ab3", fontSize: 12 },
-          itemGap: 16,
+          data: [
+            { name: "计划产量", itemStyle: { color: "#ff9800" } },
+            { name: "实轧产量", icon: "rect", itemStyle: { color: "#4caf50" } },
+          ],
+          top: 40,
+          right: 8,
+          ...panelLegendStandard,
         },
         xAxis: [
           {
@@ -160,6 +183,7 @@ export default {
             data: planProduction,
             symbol: "none",
             smooth: true,
+            itemStyle: { color: "#ff9800" },
             lineStyle: {
               type: "dashed",
               color: "#ff9800",
@@ -177,6 +201,7 @@ export default {
             type: "bar",
             data: actualProduction,
             barMaxWidth: 18,
+            // 图例取色用；柱体仍按与计划比较显示红/绿
             itemStyle: {
               color: function (params) {
                 return params.value < planProduction[params.dataIndex]
@@ -189,6 +214,13 @@ export default {
         ],
       };
       chart.setOption(option, true);
+      this.$nextTick(() => {
+        try {
+          chart.resize();
+        } catch (e) {
+          /* ignore */
+        }
+      });
     },
     handleResize() {
       if (this.productionChart) {
@@ -200,39 +232,16 @@ export default {
 </script>
 
 <style lang="less" scoped>
+@import "../styles/panelSectionLayout.less";
+
 .center-chart {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  padding: 16px;
-
-  .chart-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 16px;
-
-    .chart-title {
-      font-size: 16px;
-      font-weight: bold;
-      color: #e6e9f0;
-      margin: 0;
-    }
-
-    .chart-info {
-      display: flex;
-      gap: 16px;
-
-      .info-item {
-        font-size: 12px;
-        color: #8c9ab3;
-      }
-    }
-  }
+  /* 与左右栏 stacked 面板一致：在 flex 容器内占满剩余高度 */
+  flex: 1;
+  min-height: 0;
+  .dashboard-center-chart-shell();
 
   .chart-container {
-    flex: 1;
-    width: 100%;
+    .dashboard-flex-chart-host();
   }
 }
 </style>

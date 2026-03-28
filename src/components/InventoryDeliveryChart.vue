@@ -1,24 +1,33 @@
 <template>
   <div class="panel-section">
-    <h3 class="section-title">库存安全水位</h3>
-
-    <div class="mini-card">
+    <ModulePanelTitle>钢坯库存</ModulePanelTitle>
+    <div class="mini-card" ref="miniCard">
       <div class="mini-chart" ref="levelChart"></div>
-      <div class="mini-caption">当前 vs 安全线（含日增减）</div>
     </div>
 
     <div class="chart-container" ref="inventoryChart"></div>
-    <div class="chart-caption">近7日库存趋势（红虚线：安全线）</div>
   </div>
 </template>
 
 <script>
 import * as echarts from "echarts";
-import { darkTheme } from "../utils/echarts";
+import {
+  darkTheme,
+  panelTooltipAxis,
+  panelAxisPointerLine,
+  panelSplitLine,
+  panelXAxisCategory,
+  panelTitleModule,
+  panelCaptionBottomCenter,
+  panelLegendStandard,
+} from "../utils/echarts";
 import { DASHBOARD_CONSTANTS } from "@/config/dashboardConstants";
+import { observeElementsForResize } from "@/utils/chartResizeObserver";
+import ModulePanelTitle from "./ModulePanelTitle.vue";
 
 export default {
   name: "InventoryDeliveryChart",
+  components: { ModulePanelTitle },
   props: {
     inventoryData: {
       type: Array,
@@ -29,12 +38,28 @@ export default {
       default: () => [],
     },
   },
+  data() {
+    return {
+      _stopResizeObs: null,
+    };
+  },
   mounted() {
     this.initChart();
     window.addEventListener("resize", this.handleResize);
+    this.$nextTick(() => {
+      this._stopResizeObs = observeElementsForResize(
+        [this.$refs.miniCard, this.$refs.inventoryChart],
+        this.handleResize
+      );
+      requestAnimationFrame(() => {
+        this.handleResize();
+      });
+    });
   },
   beforeDestroy() {
     window.removeEventListener("resize", this.handleResize);
+    if (this._stopResizeObs) this._stopResizeObs();
+    this._stopResizeObs = null;
     if (this.levelChart) this.levelChart.dispose();
     if (this.trendChart) this.trendChart.dispose();
     this.levelChart = null;
@@ -85,10 +110,40 @@ export default {
       const inventory = inventorySource.map((item) => item.inventory || 0);
 
       const option = {
-        tooltip: { trigger: "axis" },
-        legend: { show: false },
-        grid: { top: 12, left: 10, right: 10, bottom: 18, containLabel: false },
-        xAxis: [{ type: "category", data: dates, axisTick: { show: false } }],
+        backgroundColor: "transparent",
+        color: ["#64b5f6"],
+        title: {
+          text: "",
+          subtext: "钢坯库存走势（近7日，红虚线为安全库存线）",
+          ...panelTitleModule,
+          ...panelCaptionBottomCenter,
+        },
+        tooltip: {
+          ...panelTooltipAxis,
+          axisPointer: panelAxisPointerLine,
+        },
+        legend: {
+          show: true,
+          data: [{ name: "钢坯库存", itemStyle: { color: "#64b5f6" } }],
+          left: 8,
+          top: 8,
+          ...panelLegendStandard,
+        },
+        grid: { top: 36, left: 8, right: 14, bottom: 72, containLabel: false },
+        xAxis: [
+          {
+            type: "category",
+            data: dates,
+            ...panelXAxisCategory,
+            axisLabel: {
+              ...panelXAxisCategory.axisLabel,
+              fontSize: 9,
+              margin: 8,
+              interval: 0,
+              rotate: dates.length > 5 ? 20 : 0,
+            },
+          },
+        ],
         yAxis: [
           {
             type: "value",
@@ -97,7 +152,7 @@ export default {
             max: Math.max(...inventory, this.safetyLine) + 0.2,
             axisLabel: { show: false },
             splitNumber: 2,
-            splitLine: { lineStyle: { color: "rgba(255,255,255,0.04)" } },
+            splitLine: panelSplitLine,
           },
         ],
         series: [
@@ -105,37 +160,106 @@ export default {
             name: "钢坯库存",
             type: "line",
             data: inventory,
-            smooth: true,
-            symbol: "none",
-            lineStyle: { color: "#2d8cff", width: 2 },
+            smooth: 0.35,
+            symbol: "circle",
+            symbolSize: 4,
+            showSymbol: false,
+            itemStyle: { color: "#64b5f6" },
+            lineStyle: {
+              width: 2.5,
+              color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
+                { offset: 0, color: "#64b5f6" },
+                { offset: 1, color: "#1565c0" },
+              ]),
+              shadowColor: "rgba(45,140,255,0.35)",
+              shadowBlur: 8,
+            },
             areaStyle: {
               color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-                { offset: 0, color: "rgba(45, 140, 255, 0.3)" },
-                { offset: 1, color: "rgba(45, 140, 255, 0.1)" },
+                { offset: 0, color: "rgba(45, 140, 255, 0.28)" },
+                { offset: 1, color: "rgba(45, 140, 255, 0.03)" },
               ]),
             },
             markLine: {
               symbol: "none",
               label: { show: false },
-              lineStyle: { color: "rgba(244,67,54,0.7)", type: "dashed" },
+              lineStyle: { color: "rgba(244,67,54,0.75)", type: "dashed", width: 1 },
               data: [{ yAxis: this.safetyLine }],
             },
           },
         ],
       };
       trend.setOption(option, true);
+      this.$nextTick(() => {
+        try {
+          trend.resize();
+          level.resize();
+        } catch (e) {
+          /* ignore */
+        }
+      });
     },
     updateLevelOption(chart) {
       const v = this.latestInventory;
       const delta = this.trendDelta;
       const max = Math.max(this.safetyLine * 2, v * 1.2, 0.5);
       const good = v > this.safetyLine;
-      const color = good ? "#4caf50" : "#f44336";
       const deltaColor = delta >= 0 ? "#4caf50" : "#f44336";
       const arrow = delta >= 0 ? "↑" : "↓";
 
       const option = {
-        grid: { top: 8, left: 10, right: 10, bottom: 6, containLabel: false },
+        backgroundColor: "transparent",
+        title: {
+          text: `库存安全水位 · 安全线 ${this.safetyLine.toFixed(
+            2
+          )} 万吨（柱右为较上日增减）`,
+          subtext: "",
+          ...panelTitleModule,
+          ...panelCaptionBottomCenter,
+        },
+        tooltip: {
+          ...panelTooltipAxis,
+          trigger: "item",
+          formatter: () =>
+            `<b>库存水位</b><br/>当前 ${v.toFixed(2)} 万吨<br/>日变化 ${arrow} ${Math.abs(
+              delta
+            ).toFixed(2)}`,
+        },
+        legend: { show: false },
+        grid: {
+          left: "4%",
+          right: "20%",
+          top: "8%",
+          bottom: "34%",
+          containLabel: false,
+        },
+        media: [
+          {
+            query: { maxWidth: 260 },
+            option: {
+              grid: {
+                left: "2%",
+                right: "28%",
+                top: "4%",
+                bottom: "42%",
+              },
+              title: {
+                textStyle: { fontSize: 10 },
+              },
+            },
+          },
+          {
+            query: { minWidth: 420 },
+            option: {
+              grid: {
+                left: "5%",
+                right: "16%",
+                top: "10%",
+                bottom: "28%",
+              },
+            },
+          },
+        ],
         xAxis: {
           type: "value",
           min: 0,
@@ -154,49 +278,45 @@ export default {
         },
         series: [
           {
-            type: "bar",
-            data: [max],
-            barWidth: 12,
-            silent: true,
-            itemStyle: { color: "rgba(255,255,255,0.06)", borderRadius: 6 },
-            z: 1,
-          },
-          {
+            name: "当前库存",
             type: "bar",
             data: [v],
-            barWidth: 12,
-            itemStyle: { color, borderRadius: 6 },
-            z: 2,
+            barWidth: "58%",
+            barMinWidth: "18%",
+            showBackground: true,
+            backgroundStyle: {
+              color: "rgba(255,255,255,0.08)",
+              borderRadius: 5,
+            },
+            itemStyle: {
+              color: good
+                ? new echarts.graphic.LinearGradient(0, 0, 1, 0, [
+                    { offset: 0, color: "#81c784" },
+                    { offset: 1, color: "#2e7d32" },
+                  ])
+                : new echarts.graphic.LinearGradient(0, 0, 1, 0, [
+                    { offset: 0, color: "#ff8a80" },
+                    { offset: 1, color: "#c62828" },
+                  ]),
+              borderRadius: 5,
+              shadowBlur: 6,
+              shadowColor: "rgba(0,0,0,0.25)",
+            },
             label: {
               show: true,
               position: "right",
-              distance: 6,
+              distance: 4,
               formatter: () =>
-                `{v|${v.toFixed(2)} 万吨}  {d|${arrow} ${Math.abs(delta).toFixed(
-                  2
-                )}}`,
+                `{v|${v.toFixed(2)}万} {d|${arrow}${Math.abs(delta).toFixed(2)}}`,
               rich: {
-                v: { color: "#e6e9f0", fontSize: 12, fontWeight: 800 },
-                d: { color: deltaColor, fontSize: 12, fontWeight: 800 },
+                v: { color: "#e6e9f0", fontSize: 10, fontWeight: 700 },
+                d: { color: deltaColor, fontSize: 10, fontWeight: 700 },
               },
             },
-          },
-          {
-            type: "line",
-            data: [this.safetyLine],
-            symbol: "none",
-            z: 3,
-            lineStyle: { opacity: 0 },
             markLine: {
               symbol: "none",
-              label: {
-                show: true,
-                formatter: `安全线 ${this.safetyLine.toFixed(2)}`,
-                color: "rgba(244,67,54,0.9)",
-                fontSize: 11,
-                fontWeight: 700,
-              },
-              lineStyle: { color: "rgba(244,67,54,0.8)", type: "dashed" },
+              label: { show: false },
+              lineStyle: { color: "rgba(244,67,54,0.85)", type: "dashed", width: 1 },
               data: [{ xAxis: this.safetyLine }],
             },
           },
@@ -204,6 +324,15 @@ export default {
       };
 
       chart.setOption(option, true);
+      this.$nextTick(() => {
+        requestAnimationFrame(() => {
+          try {
+            chart.resize();
+          } catch (e) {
+            /* ignore */
+          }
+        });
+      });
     },
     handleResize() {
       if (this.levelChart) this.levelChart.resize();
@@ -229,57 +358,31 @@ export default {
 </script>
 
 <style lang="less" scoped>
-.panel-section {
-  flex: 1;
-  background-color: transparent;
-  border-radius: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+@import "../styles/panelSectionLayout.less";
 
-  .section-title {
-    font-size: 14px;
-    font-weight: bold;
-    color: #e6e9f0;
-    margin-bottom: 0;
-  }
+.panel-section {
+  .dashboard-panel-section-core();
 
   .mini-card {
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(42, 58, 74, 0.8);
-    border-radius: 8px;
-    padding: 8px 8px 4px;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    min-height: 78px;
+    .dashboard-mini-gauge-cell();
+    width: 100%;
+    flex: 0 1 35%;
+    min-height: 92px;
+    max-height: 48%;
+    background: rgba(255, 255, 255, 0.04);
+    border: none;
+    border-radius: 6px;
+    padding: 6px 8px 6px 6px;
+    gap: 4px;
   }
 
   .mini-chart {
-    width: 100%;
-    height: 52px;
-  }
-
-  .mini-caption {
-    font-size: 11px;
-    color: #8c9ab3;
-    text-align: center;
-  }
-
-  .chart-container {
-    width: 100%;
-    flex: 1;
+    .dashboard-mini-gauge-canvas();
     min-height: 0;
   }
 
-  .chart-caption {
-    width: 100%;
-    text-align: center;
-    font-size: 11px;
-    color: #8c9ab3;
-    line-height: 14px;
-    margin-top: -4px;
+  .chart-container {
+    .dashboard-flex-chart-host();
   }
 }
 </style>

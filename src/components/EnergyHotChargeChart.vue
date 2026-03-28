@@ -1,30 +1,60 @@
 <template>
   <div class="panel-section">
-    <h3 class="section-title">能耗目标偏差</h3>
-
+    <ModulePanelTitle>能耗目标偏差</ModulePanelTitle>
     <div class="mini-row">
       <div class="mini-card">
-        <div class="mini-chart" ref="hotGauge"></div>
-        <div class="mini-caption">热装率偏差（目标 {{ hotChargeTarget.toFixed(0) }}%）</div>
+        <div class="mini-chart-wrap">
+          <div class="mini-chart" ref="hotGauge"></div>
+        </div>
+        <div class="gauge-value">{{ hotMainValueText }}</div>
+        <div class="gauge-meta">
+          <div class="gauge-meta-title">
+            热装率（目标 {{ hotChargeTarget }}%）
+          </div>
+          <div class="gauge-meta-delta" :style="{ color: hotDeltaColor }">
+            {{ hotDeltaText }}
+          </div>
+        </div>
       </div>
       <div class="mini-card">
-        <div class="mini-chart" ref="gasGauge"></div>
-        <div class="mini-caption">煤气单耗偏差（目标 ≤ {{ gasTarget.toFixed(2) }}）</div>
+        <div class="mini-chart-wrap">
+          <div class="mini-chart" ref="gasGauge"></div>
+        </div>
+        <div class="gauge-value">{{ gasMainValueText }}</div>
+        <div class="gauge-meta">
+          <div class="gauge-meta-title">
+            煤气单耗（目标≤{{ gasTarget.toFixed(2) }}）
+          </div>
+          <div class="gauge-meta-delta" :style="{ color: gasDeltaColor }">
+            {{ gasDeltaText }}
+          </div>
+        </div>
       </div>
     </div>
 
     <div class="chart-container" ref="energyChart"></div>
-    <div class="chart-caption">近7日：实际 vs 目标（虚线）</div>
   </div>
 </template>
 
 <script>
 import * as echarts from "echarts";
-import { darkTheme } from "../utils/echarts";
+import {
+  darkTheme,
+  panelTooltipAxis,
+  panelAxisPointerLine,
+  panelSplitLine,
+  panelXAxisCategory,
+  panelTitleModule,
+  panelCaptionBottomCenter,
+  panelLegendStandard,
+} from "../utils/echarts";
 import { DASHBOARD_CONSTANTS } from "@/config/dashboardConstants";
+import { observeElementsForResize } from "@/utils/chartResizeObserver";
+import ModulePanelTitle from "./ModulePanelTitle.vue";
 
 export default {
   name: "EnergyHotChargeChart",
+  components: { ModulePanelTitle },
   props: {
     energyData: {
       type: Array,
@@ -36,14 +66,23 @@ export default {
       hotGaugeChart: null,
       gasGaugeChart: null,
       trendChart: null,
+      _stopResizeObs: null,
     };
   },
   mounted() {
     this.initChart();
     window.addEventListener("resize", this.handleResize);
+    this.$nextTick(() => {
+      this._stopResizeObs = observeElementsForResize(
+        [this.$refs.hotGauge, this.$refs.gasGauge, this.$refs.energyChart],
+        this.handleResize
+      );
+    });
   },
   beforeDestroy() {
     window.removeEventListener("resize", this.handleResize);
+    if (this._stopResizeObs) this._stopResizeObs();
+    this._stopResizeObs = null;
     if (this.hotGaugeChart) this.hotGaugeChart.dispose();
     if (this.gasGaugeChart) this.gasGaugeChart.dispose();
     if (this.trendChart) this.trendChart.dispose();
@@ -101,17 +140,46 @@ export default {
       const gasConsumption = source.map((item) => item.gas_consumption || 0);
 
       const option = {
-        tooltip: { trigger: "axis" },
-        legend: {
-          top: 0,
-          right: 0,
-          data: ["热装率", "热装目标", "煤气单耗", "煤气目标"],
-          textStyle: { color: "#8c9ab3", fontSize: 11 },
-          itemWidth: 10,
-          itemHeight: 6,
+        backgroundColor: "transparent",
+        color: ["#4da3ff", "#81c784", "#ffb74d", "#81c784"],
+        title: {
+          text: "",
+          subtext: "热装率与煤气单耗（近7日）：实线为实际值，虚线为目标值",
+          ...panelTitleModule,
+          ...panelCaptionBottomCenter,
         },
-        grid: { top: 26, left: 10, right: 10, bottom: 18, containLabel: false },
-        xAxis: [{ type: "category", data: dates, axisTick: { show: false } }],
+        tooltip: {
+          ...panelTooltipAxis,
+          axisPointer: panelAxisPointerLine,
+        },
+        legend: {
+          orient: "vertical",
+          right: 4,
+          top: "middle",
+          data: [
+            { name: "热装率", itemStyle: { color: "#4da3ff" } },
+            { name: "热装目标", itemStyle: { color: "#81c784" } },
+            { name: "煤气单耗", itemStyle: { color: "#ffb74d" } },
+            { name: "煤气目标", itemStyle: { color: "#81c784" } },
+          ],
+          ...panelLegendStandard,
+          itemGap: 6,
+        },
+        grid: { top: 18, left: 8, right: 64, bottom: 62, containLabel: false },
+        xAxis: [
+          {
+            type: "category",
+            data: dates,
+            ...panelXAxisCategory,
+            axisLabel: {
+              ...panelXAxisCategory.axisLabel,
+              fontSize: 10,
+              margin: 10,
+              interval: 0,
+              rotate: dates.length > 6 ? 18 : 0,
+            },
+          },
+        ],
         yAxis: [
           {
             type: "value",
@@ -120,7 +188,7 @@ export default {
             max: Math.max(...hotChargeRate, this.hotChargeTarget) + 8,
             axisLabel: { show: false },
             splitNumber: 2,
-            splitLine: { lineStyle: { color: "rgba(255,255,255,0.04)" } },
+            splitLine: panelSplitLine,
           },
           {
             type: "value",
@@ -137,41 +205,86 @@ export default {
             name: "热装率",
             type: "line",
             data: hotChargeRate,
-            smooth: true,
-            symbol: "none",
-            lineStyle: { color: "#2d8cff", width: 2 },
-            areaStyle: { color: "rgba(45,140,255,0.10)" },
+            smooth: 0.35,
+            symbol: "circle",
+            symbolSize: 4,
+            showSymbol: false,
+            itemStyle: { color: "#4da3ff" },
+            lineStyle: {
+              color: "#4da3ff",
+              width: 2.5,
+              shadowColor: "rgba(45,140,255,0.4)",
+              shadowBlur: 8,
+            },
+            areaStyle: {
+              color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                { offset: 0, color: "rgba(45,140,255,0.22)" },
+                { offset: 1, color: "rgba(45,140,255,0.02)" },
+              ]),
+            },
           },
           {
             name: "热装目标",
             type: "line",
             data: hotChargeRate.map(() => this.hotChargeTarget),
-            smooth: true,
+            smooth: 0.35,
             symbol: "none",
-            lineStyle: { color: "rgba(76,175,80,0.9)", width: 1, type: "dashed" },
+            itemStyle: { color: "#81c784" },
+            lineStyle: {
+              color: "rgba(129,199,132,0.95)",
+              width: 1.5,
+              type: "dashed",
+            },
           },
           {
             name: "煤气单耗",
             type: "line",
             yAxisIndex: 1,
             data: gasConsumption,
-            smooth: true,
-            symbol: "none",
-            lineStyle: { color: "#ff9800", width: 2 },
-            areaStyle: { color: "rgba(255,152,0,0.10)" },
+            smooth: 0.35,
+            symbol: "circle",
+            symbolSize: 4,
+            showSymbol: false,
+            itemStyle: { color: "#ffb74d" },
+            lineStyle: {
+              color: "#ffb74d",
+              width: 2.5,
+              shadowColor: "rgba(255,152,0,0.35)",
+              shadowBlur: 8,
+            },
+            areaStyle: {
+              color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                { offset: 0, color: "rgba(255,183,77,0.2)" },
+                { offset: 1, color: "rgba(255,183,77,0.02)" },
+              ]),
+            },
           },
           {
             name: "煤气目标",
             type: "line",
             yAxisIndex: 1,
             data: gasConsumption.map(() => this.gasTarget),
-            smooth: true,
+            smooth: 0.35,
             symbol: "none",
-            lineStyle: { color: "rgba(76,175,80,0.9)", width: 1, type: "dashed" },
+            itemStyle: { color: "#81c784" },
+            lineStyle: {
+              color: "rgba(129,199,132,0.95)",
+              width: 1.5,
+              type: "dashed",
+            },
           },
         ],
       };
       trend.setOption(option, true);
+      this.$nextTick(() => {
+        try {
+          trend.resize();
+          hotGauge.resize();
+          gasGauge.resize();
+        } catch (e) {
+          /* ignore */
+        }
+      });
     },
     updateMiniGauges(hotGauge, gasGauge) {
       const hotValue = Number(this.latestEnergy?.hot_charge_rate) || 0;
@@ -189,39 +302,50 @@ export default {
         series: [
           {
             type: "gauge",
+            radius: "72%",
+            center: ["50%", "58%"],
             startAngle: 210,
             endAngle: -30,
             min: 0,
             max: 100,
             splitNumber: 4,
             axisLine: {
-              lineStyle: { width: 10, color: [[1, "rgba(76,175,80,0.20)"]] },
+              roundCap: true,
+              lineStyle: {
+                width: 6,
+                color: [[1, "rgba(255,255,255,0.08)"]],
+              },
+            },
+            progress: {
+              show: true,
+              width: 6,
+              roundCap: true,
+              overlap: false,
+              itemStyle: {
+                color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
+                  { offset: 0, color: "#64b5f6" },
+                  { offset: 1, color: levelColor(hotLevel) },
+                ]),
+              },
             },
             axisTick: { show: false },
             splitLine: { show: false },
             axisLabel: { show: false },
-            pointer: { width: 3, itemStyle: { color: levelColor(hotLevel) } },
-            title: {
+            anchor: { show: false },
+            pointer: {
               show: true,
-              offsetCenter: [0, "62%"],
-              color: "#8c9ab3",
-              fontSize: 11,
-              text: "热装率",
-            },
-            detail: {
-              show: true,
-              offsetCenter: [0, "18%"],
-              fontSize: 14,
-              fontWeight: 800,
-              color: "#e6e9f0",
-              formatter: () =>
-                `${hotValue.toFixed(1)}%\n{d|${hotDelta >= 0 ? "+" : ""}${hotDelta.toFixed(
-                  1
-                )}%}`,
-              rich: {
-                d: { fontSize: 11, fontWeight: 800, color: levelColor(hotLevel) },
+              showAbove: true,
+              length: "72%",
+              width: 3,
+              offsetCenter: [0, 0],
+              itemStyle: {
+                color: "#5eb8ff",
+                shadowBlur: 3,
+                shadowColor: "rgba(30,90,160,0.55)",
               },
             },
+            title: { show: false },
+            detail: { show: false },
             data: [{ value: hotValue }],
           },
         ],
@@ -231,39 +355,50 @@ export default {
         series: [
           {
             type: "gauge",
+            radius: "72%",
+            center: ["50%", "58%"],
             startAngle: 210,
             endAngle: -30,
             min: 0.8,
             max: 1.4,
             splitNumber: 3,
             axisLine: {
-              lineStyle: { width: 10, color: [[1, "rgba(76,175,80,0.20)"]] },
+              roundCap: true,
+              lineStyle: {
+                width: 6,
+                color: [[1, "rgba(255,255,255,0.08)"]],
+              },
+            },
+            progress: {
+              show: true,
+              width: 6,
+              roundCap: true,
+              overlap: false,
+              itemStyle: {
+                color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
+                  { offset: 0, color: "#ffe082" },
+                  { offset: 1, color: levelColor(gasLevel) },
+                ]),
+              },
             },
             axisTick: { show: false },
             splitLine: { show: false },
             axisLabel: { show: false },
-            pointer: { width: 3, itemStyle: { color: levelColor(gasLevel) } },
-            title: {
+            anchor: { show: false },
+            pointer: {
               show: true,
-              offsetCenter: [0, "62%"],
-              color: "#8c9ab3",
-              fontSize: 11,
-              text: "煤气单耗",
-            },
-            detail: {
-              show: true,
-              offsetCenter: [0, "18%"],
-              fontSize: 14,
-              fontWeight: 800,
-              color: "#e6e9f0",
-              formatter: () =>
-                `${gasValue.toFixed(2)}\n{d|${gasDelta >= 0 ? "+" : ""}${gasDelta.toFixed(
-                  2
-                )}}`,
-              rich: {
-                d: { fontSize: 11, fontWeight: 800, color: levelColor(gasLevel) },
+              showAbove: true,
+              length: "72%",
+              width: 3,
+              offsetCenter: [0, 0],
+              itemStyle: {
+                color: "#ffb74d",
+                shadowBlur: 3,
+                shadowColor: "rgba(180,100,20,0.45)",
               },
             },
+            title: { show: false },
+            detail: { show: false },
             data: [{ value: gasValue }],
           },
         ],
@@ -289,68 +424,104 @@ export default {
     gasTarget() {
       return DASHBOARD_CONSTANTS.gasConsumptionTarget;
     },
+    hotMainValueText() {
+      const v = Number(this.latestEnergy?.hot_charge_rate) || 0;
+      return `${v.toFixed(1)}%`;
+    },
+    gasMainValueText() {
+      const v = Number(this.latestEnergy?.gas_consumption) || 0;
+      return v.toFixed(2);
+    },
+    hotDeltaText() {
+      const v = Number(this.latestEnergy?.hot_charge_rate) || 0;
+      const d = v - this.hotChargeTarget;
+      return `${d >= 0 ? "+" : ""}${d.toFixed(1)}%`;
+    },
+    hotDeltaColor() {
+      const v = Number(this.latestEnergy?.hot_charge_rate) || 0;
+      const d = v - this.hotChargeTarget;
+      if (d >= 0) return "#4caf50";
+      if (d >= -5) return "#ff9800";
+      return "#f44336";
+    },
+    gasDeltaText() {
+      const v = Number(this.latestEnergy?.gas_consumption) || 0;
+      const d = v - this.gasTarget;
+      return `${d >= 0 ? "+" : ""}${d.toFixed(2)}`;
+    },
+    gasDeltaColor() {
+      const v = Number(this.latestEnergy?.gas_consumption) || 0;
+      const d = v - this.gasTarget;
+      if (d <= 0) return "#4caf50";
+      if (d <= 0.05) return "#ff9800";
+      return "#f44336";
+    },
   },
 };
 </script>
 
 <style lang="less" scoped>
-.panel-section {
-  flex: 1;
-  background-color: transparent;
-  border-radius: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+@import "../styles/panelSectionLayout.less";
 
-  .section-title {
-    font-size: 14px;
-    font-weight: bold;
-    color: #e6e9f0;
-    margin-bottom: 0;
-  }
+.panel-section {
+  .dashboard-panel-section-core();
 
   .mini-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
+    .dashboard-mini-gauge-row();
   }
 
   .mini-card {
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(42, 58, 74, 0.8);
-    border-radius: 8px;
-    padding: 8px 8px 4px;
+    .dashboard-mini-gauge-cell();
+    background: rgba(255, 255, 255, 0.04);
+    border: none;
+    border-radius: 6px;
+    padding: 6px 4px 8px;
+    gap: 2px;
+  }
+
+  .mini-chart-wrap {
+    flex: 1;
+    min-height: 0;
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    min-height: 86px;
   }
 
   .mini-chart {
-    width: 100%;
-    height: 64px;
+    .dashboard-mini-gauge-canvas();
   }
 
-  .mini-caption {
-    font-size: 11px;
-    color: #8c9ab3;
+  .gauge-value {
+    flex-shrink: 0;
     text-align: center;
+    font-size: 17px;
+    font-weight: 800;
+    color: #e6e9f0;
+    letter-spacing: 0.02em;
+    line-height: 1.2;
+    padding: 2px 4px 0;
+  }
+
+  .gauge-meta {
+    flex-shrink: 0;
+    text-align: center;
+    padding: 2px 2px 0;
+    line-height: 1.35;
+  }
+
+  .gauge-meta-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: #e8eaef;
+  }
+
+  .gauge-meta-delta {
+    margin-top: 2px;
+    font-size: 10px;
+    font-weight: 700;
   }
 
   .chart-container {
-    width: 100%;
-    flex: 1;
-    min-height: 0;
-  }
-
-  .chart-caption {
-    width: 100%;
-    text-align: center;
-    font-size: 11px;
-    color: #8c9ab3;
-    line-height: 14px;
-    margin-top: -4px;
+    .dashboard-flex-chart-host();
   }
 }
 </style>

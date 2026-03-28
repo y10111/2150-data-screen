@@ -12,7 +12,7 @@
       />
       <QualityYieldChart :qualityData="qualityData" :defectData="defectData" />
     </PanelFrame>
-    <PanelFrame class="panel center-panel" borderComponent="dv-border-box-2">
+    <PanelFrame class="panel center-panel" borderComponent="dv-border-box-2" stacked>
       <CenterChart :productionData="trendData" />
     </PanelFrame>
     <PanelFrame class="panel right-panel" borderComponent="dv-border-box-1" stacked>

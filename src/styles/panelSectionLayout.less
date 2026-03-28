@@ -1,0 +1,58 @@
+/* 与「设备事故解释」一致：内容限制在容器内，随父级 flex 高度自适应 */
+
+.dashboard-panel-section-core() {
+  flex: 1;
+  min-height: 0;
+  background-color: rgba(18, 26, 38, 0.75);
+  border: 1px solid rgba(55, 76, 98, 0.7);
+  border-radius: 8px;
+  padding: 8px 12px 10px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow: hidden;
+}
+
+/* 中间产量图：无底纹，边框由 dv-border 负责，仅做 flex 约束 */
+.dashboard-center-chart-shell() {
+  height: 100%;
+  min-height: 0;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow: hidden;
+  padding: 8px 12px 10px;
+}
+
+.dashboard-flex-chart-host() {
+  width: 100%;
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+/* 顶部迷你仪表盘行：与主趋势图一起随 panel 高度按比例伸缩（参考设备事故双图） */
+.dashboard-mini-gauge-row() {
+  display: flex;
+  gap: 10px;
+  flex: 0 1 35%;
+  min-height: 72px;
+  max-height: 48%;
+  min-width: 0;
+}
+
+.dashboard-mini-gauge-cell() {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 迷你图 ECharts 挂载点：占满卡片剩余高度，可随父级变高变矮 */
+.dashboard-mini-gauge-canvas() {
+  flex: 1;
+  min-height: 52px;
+  width: 100%;
+}

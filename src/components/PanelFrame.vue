@@ -37,7 +37,7 @@ export default {
 .panel-content.stacked {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 10px;
   padding: 16px;
   box-sizing: border-box;
 }

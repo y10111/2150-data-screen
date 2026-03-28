@@ -1,27 +1,12 @@
 <template>
   <div class="panel-section">
-    <h3 class="section-title">设备事故解释</h3>
-
+    <ModulePanelTitle>设备事故解释</ModulePanelTitle>
     <div class="accident-summary">
-      <div class="pie-wrap">
-        <div class="pie-legend-column">
-          <div
-            v-for="item in pieLegendItems"
-            :key="item.name"
-            class="legend-item"
-            :class="{ active: item.name === dominantType }"
-          >
-            <span class="dot" :class="item.name"></span>
-            <span class="text">{{ item.text }}</span>
-          </div>
-        </div>
+      <div class="chart-cell">
         <div class="pie-chart" ref="pieChart"></div>
-        <div class="chart-caption">事故类型占比</div>
       </div>
-
-      <div class="gauge-wrap">
-        <div class="gauge-chart" ref="trendChart"></div>
-        <div class="chart-caption">事故时长变化（近7日）</div>
+      <div class="chart-cell">
+        <div class="trend-chart" ref="trendChart"></div>
       </div>
     </div>
   </div>
@@ -29,10 +14,24 @@
 
 <script>
 import * as echarts from "echarts";
-import { darkTheme } from "../utils/echarts";
+import {
+  darkTheme,
+  panelTooltipItem,
+  panelTooltipAxis,
+  panelAxisPointerLine,
+  panelSplitLine,
+  panelXAxisCategory,
+  panelLegendStandard,
+  panelTitleModule,
+  panelCaptionBottomCenter,
+} from "../utils/echarts";
+import { DASHBOARD_CONSTANTS } from "@/config/dashboardConstants";
+import { observeElementsForResize } from "@/utils/chartResizeObserver";
+import ModulePanelTitle from "./ModulePanelTitle.vue";
 
 export default {
   name: "DeviceAccidentChart",
+  components: { ModulePanelTitle },
   props: {
     qualityData: {
       type: Array,
@@ -43,21 +42,25 @@ export default {
     return {
       pieChart: null,
       gaugeChart: null,
-      carouselTimer: null,
-      typeIndex: 0,
+      _stopResizeObs: null,
     };
   },
   mounted() {
     this.initChart();
     window.addEventListener("resize", this.handleResize);
+    this.$nextTick(() => {
+      this._stopResizeObs = observeElementsForResize(
+        [this.$refs.pieChart, this.$refs.trendChart],
+        this.handleResize
+      );
+    });
   },
   beforeDestroy() {
     window.removeEventListener("resize", this.handleResize);
-    this.stopCarousel();
-    if (this.pieChart) this.pieChart.dispose();
-    if (this.gaugeChart) this.gaugeChart.dispose();
-    this.pieChart = null;
-    this.gaugeChart = null;
+    if (this._stopResizeObs) this._stopResizeObs();
+    this._stopResizeObs = null;
+    this.disposePieIfNeeded();
+    this.disposeGaugeIfNeeded();
   },
   watch: {
     qualityData: {
@@ -68,46 +71,106 @@ export default {
     },
   },
   methods: {
-    stopCarousel() {
-      if (this.carouselTimer) {
-        clearInterval(this.carouselTimer);
-        this.carouselTimer = null;
+    isChartContainer(el) {
+      return (
+        el &&
+        el.nodeType === 1 &&
+        typeof el.getBoundingClientRect === "function"
+      );
+    },
+    disposePieIfNeeded() {
+      if (!this.pieChart) return;
+      try {
+        this.pieChart.dispose();
+      } catch (e) {
+        /* ignore */
       }
+      this.pieChart = null;
+    },
+    disposeGaugeIfNeeded() {
+      if (!this.gaugeChart) return;
+      try {
+        this.gaugeChart.dispose();
+      } catch (e) {
+        /* ignore */
+      }
+      this.gaugeChart = null;
     },
     getOrCreatePieChart() {
-      if (this.pieChart) return this.pieChart;
-      this.pieChart = echarts.init(this.$refs.pieChart, null, {
+      const el = this.$refs.pieChart;
+      if (!this.isChartContainer(el)) return null;
+      if (this.pieChart) {
+        let dom = null;
+        try {
+          dom = this.pieChart.getDom ? this.pieChart.getDom() : null;
+        } catch (e) {
+          dom = null;
+        }
+        if (dom === el) return this.pieChart;
+        this.disposePieIfNeeded();
+      }
+      const existed = echarts.getInstanceByDom(el);
+      if (existed) {
+        this.pieChart = existed;
+        return existed;
+      }
+      this.pieChart = echarts.init(el, null, {
         theme: darkTheme,
       });
       return this.pieChart;
     },
     getOrCreateGaugeChart() {
-      if (this.gaugeChart) return this.gaugeChart;
-      this.gaugeChart = echarts.init(this.$refs.trendChart, null, {
+      const el = this.$refs.trendChart;
+      if (!this.isChartContainer(el)) return null;
+      if (this.gaugeChart) {
+        let dom = null;
+        try {
+          dom = this.gaugeChart.getDom ? this.gaugeChart.getDom() : null;
+        } catch (e) {
+          dom = null;
+        }
+        if (dom === el) return this.gaugeChart;
+        this.disposeGaugeIfNeeded();
+      }
+      const existed = echarts.getInstanceByDom(el);
+      if (existed) {
+        this.gaugeChart = existed;
+        return existed;
+      }
+      this.gaugeChart = echarts.init(el, null, {
         theme: darkTheme,
       });
       return this.gaugeChart;
     },
     initChart() {
-      if (!this.$refs.pieChart || !this.$refs.trendChart) return;
-
-      this.stopCarousel();
-      this.typeIndex = 0;
-
-      this.getOrCreatePieChart();
-      this.getOrCreateGaugeChart();
-
-      this.updatePieOption();
-      this.updateGaugeOption();
-
-      this.carouselTimer = setInterval(() => {
-        this.typeIndex = (this.typeIndex + 1) % 3;
+      const run = () => {
+        if (
+          !this.isChartContainer(this.$refs.pieChart) ||
+          !this.isChartContainer(this.$refs.trendChart)
+        ) {
+          return;
+        }
+        const pie = this.getOrCreatePieChart();
+        const gauge = this.getOrCreateGaugeChart();
+        if (!pie || !gauge) return;
         this.updatePieOption();
         this.updateGaugeOption();
-      }, 5000);
+        this.$nextTick(() => {
+          try {
+            pie.resize();
+            gauge.resize();
+          } catch (e) {
+            /* ignore */
+          }
+        });
+      };
+      this.$nextTick(() => {
+        this.$nextTick(run);
+      });
     },
     updatePieOption() {
-      const pie = this.pieChart || this.getOrCreatePieChart();
+      const pie = this.getOrCreatePieChart();
+      if (!pie) return;
 
       // rawHours：真实数据（用于仪表盘的“对应时间”）
       const electric = this.electricHours;
@@ -115,50 +178,67 @@ export default {
       const other = this.otherHours;
       const total = this.totalDowntimeHours;
 
-      // displayHours：用于让 0 值切片在轮播时也“看得见、放得大”
-      // 仪表盘仍显示 rawHours；饼图百分比可能略有偏差，优先保证交互观感。
-      const minDisplayValue = total > 0 ? total * 0.03 : 0.0001;
-
-      const normalize = (v) => (v > 0 ? v : minDisplayValue);
+      const active = this.dominantType;
       const pieData = [
         {
           name: "电气",
-          value: normalize(electric),
-          selected: this.activeType === "电气",
+          value: electric,
           itemStyle: {
-            color: "#5470c6",
-            shadowBlur: this.activeType === "电气" ? 18 : 0,
-            shadowColor: "rgba(45,140,255,0.65)",
-            opacity: this.activeType === "电气" ? 1 : 0.35,
+            color: new echarts.graphic.LinearGradient(0, 0, 1, 1, [
+              { offset: 0, color: "#7c9dff" },
+              { offset: 1, color: "#3d5cbf" },
+            ]),
+            shadowBlur: active === "电气" ? 16 : 0,
+            shadowColor: "rgba(90,140,255,0.55)",
+            opacity: active === "电气" ? 1 : 0.38,
+            borderColor: "rgba(255,255,255,0.12)",
+            borderWidth: 1,
           },
         },
         {
           name: "机械",
-          value: normalize(mechanical),
-          selected: this.activeType === "机械",
+          value: mechanical,
           itemStyle: {
-            color: "#ff9800",
-            shadowBlur: this.activeType === "机械" ? 18 : 0,
-            shadowColor: "rgba(255,152,0,0.65)",
-            opacity: this.activeType === "机械" ? 1 : 0.35,
+            color: new echarts.graphic.LinearGradient(0, 0, 1, 1, [
+              { offset: 0, color: "#ffb74d" },
+              { offset: 1, color: "#e65100" },
+            ]),
+            shadowBlur: active === "机械" ? 16 : 0,
+            shadowColor: "rgba(255,167,38,0.5)",
+            opacity: active === "机械" ? 1 : 0.38,
+            borderColor: "rgba(255,255,255,0.12)",
+            borderWidth: 1,
           },
         },
         {
           name: "其他",
-          value: normalize(other),
-          selected: this.activeType === "其他",
+          value: other,
           itemStyle: {
-            color: "#f44336",
-            shadowBlur: this.activeType === "其他" ? 18 : 0,
-            shadowColor: "rgba(244,67,54,0.65)",
-            opacity: this.activeType === "其他" ? 1 : 0.35,
+            color: new echarts.graphic.LinearGradient(0, 0, 1, 1, [
+              { offset: 0, color: "#ff8a80" },
+              { offset: 1, color: "#c62828" },
+            ]),
+            shadowBlur: active === "其他" ? 16 : 0,
+            shadowColor: "rgba(244,67,54,0.5)",
+            opacity: active === "其他" ? 1 : 0.38,
+            borderColor: "rgba(255,255,255,0.12)",
+            borderWidth: 1,
           },
         },
       ];
 
+      const totalH = total;
+      const pct = (v) => (totalH > 0 ? ((v / totalH) * 100).toFixed(0) : "0");
       const pieOption = {
+        backgroundColor: "transparent",
+        color: ["#7c9dff", "#ffb74d", "#ff8a80"],
+        title: {
+          text: "事故类型占比（按停机时长）",
+          ...panelTitleModule,
+          ...panelCaptionBottomCenter,
+        },
         tooltip: {
-          trigger: "item",
+          ...panelTooltipItem,
           formatter: (p) => {
             const rawHours =
               p.name === "电气"
@@ -166,25 +246,54 @@ export default {
                 : p.name === "机械"
                 ? mechanical
                 : other;
-            const hourText = `${rawHours.toFixed(2)}小时`;
+            const hourText = `${rawHours.toFixed(2)} 小时`;
             const percentText = `${p.percent || 0}%`;
-            return `${p.name}<br/>${hourText}<br/>占比：${percentText}`;
+            return `<div style="font-weight:600;margin-bottom:4px">${p.marker}${p.name}</div>${hourText}<br/>占比 ${percentText}`;
           },
         },
-        legend: { show: false },
+        legend: {
+          show: true,
+          orient: "vertical",
+          left: 4,
+          top: "middle",
+          ...panelLegendStandard,
+          icon: "circle",
+          itemWidth: 6,
+          itemHeight: 6,
+          itemGap: 4,
+          data: [
+            { name: "电气", itemStyle: { color: "#7c9dff" } },
+            { name: "机械", itemStyle: { color: "#ffb74d" } },
+            { name: "其他", itemStyle: { color: "#ff8a80" } },
+          ],
+          formatter: (name) => {
+            const v =
+              name === "电气"
+                ? electric
+                : name === "机械"
+                ? mechanical
+                : other;
+            return `${name}  ${pct(v)}%`;
+          },
+        },
         series: [
           {
             name: "事故类型占比",
             type: "pie",
-            selectedMode: "single",
-            // 原地突出：selectedOffset 会把切片“推开”造成视觉位移
-            selectedOffset: 0,
-            radius: ["35%", "58%"],
-            // 图例移到左侧后，圆心恢复到正中，确保与图例列水平中线对齐
-            center: ["50%", "50%"],
+            radius: ["26%", "40%"],
+            center: ["72%", "44%"],
             label: { show: false },
             labelLine: { show: false },
             avoidLabelOverlap: true,
+            emphasis: {
+              scale: true,
+              scaleSize: 4,
+              itemStyle: {
+                shadowBlur: 22,
+                shadowColor: "rgba(255,255,255,0.2)",
+                opacity: 1,
+              },
+            },
             data: pieData,
           },
         ],
@@ -193,7 +302,8 @@ export default {
       pie.setOption(pieOption, true);
     },
     updateGaugeOption() {
-      const chart = this.gaugeChart || this.getOrCreateGaugeChart();
+      const chart = this.getOrCreateGaugeChart();
+      if (!chart) return;
       const source = this.qualityData.slice(-7);
       const dates = source.map((x) => {
         const d = new Date(x.date);
@@ -201,47 +311,88 @@ export default {
       });
       const hours = source.map((x) => Number(x.device_downtime) || 0);
 
+      const warnH = DASHBOARD_CONSTANTS.deviceDowntimeWarning;
       const option = {
-        grid: { top: 12, left: 10, right: 10, bottom: 18, containLabel: false },
+        backgroundColor: "transparent",
+        color: ["#ffb74d"],
+        title: {
+          text: "事故停机时长（近7日，单位：小时）",
+          ...panelTitleModule,
+          ...panelCaptionBottomCenter,
+        },
+        grid: { top: 12, left: 58, right: 8, bottom: 72, containLabel: false },
         tooltip: {
-          trigger: "axis",
-          axisPointer: { type: "line" },
+          ...panelTooltipAxis,
+          axisPointer: panelAxisPointerLine,
           formatter: (params) => {
             const p = params?.[0];
             if (!p) return "";
-            return `${p.axisValue}<br/>事故时长：${Number(p.data).toFixed(2)} 小时`;
+            return `${p.marker} <b>${p.axisValue}</b><br/>事故时长 ${Number(
+              p.data
+            ).toFixed(2)} 小时`;
           },
         },
         xAxis: {
           type: "category",
           data: dates,
-          axisTick: { show: false },
-          axisLine: { lineStyle: { color: "rgba(255,255,255,0.06)" } },
-          axisLabel: { color: "#8c9ab3", fontSize: 11 },
+          ...panelXAxisCategory,
+          axisLabel: {
+            ...panelXAxisCategory.axisLabel,
+            fontSize: 9,
+            margin: 10,
+            interval: 0,
+            rotate: dates.length > 5 ? 32 : 0,
+            hideOverlap: true,
+          },
         },
         yAxis: {
           type: "value",
           min: 0,
-          splitNumber: 2,
+          splitNumber: 3,
           axisLabel: { show: false },
           axisTick: { show: false },
           axisLine: { show: false },
-          splitLine: { lineStyle: { color: "rgba(255,255,255,0.04)" } },
+          splitLine: panelSplitLine,
+        },
+        legend: {
+          show: true,
+          orient: "vertical",
+          left: 4,
+          top: "middle",
+          data: [{ name: "事故时长", itemStyle: { color: "#ffb74d" } }],
+          ...panelLegendStandard,
+          itemGap: 6,
         },
         series: [
           {
             name: "事故时长",
             type: "line",
             data: hours,
-            smooth: true,
-            symbol: "none",
-            lineStyle: { color: "#ff9800", width: 2 },
-            areaStyle: { color: "rgba(255,152,0,0.12)" },
+            smooth: 0.35,
+            symbol: "circle",
+            symbolSize: 4,
+            showSymbol: hours.length <= 10,
+            itemStyle: { color: "#ffb74d" },
+            lineStyle: {
+              color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
+                { offset: 0, color: "#ffcc80" },
+                { offset: 1, color: "#ff6f00" },
+              ]),
+              width: 2,
+              shadowColor: "rgba(255,152,0,0.28)",
+              shadowBlur: 6,
+            },
+            areaStyle: {
+              color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                { offset: 0, color: "rgba(255,167,38,0.28)" },
+                { offset: 1, color: "rgba(255,167,38,0.02)" },
+              ]),
+            },
             markLine: {
               symbol: "none",
               label: { show: false },
-              lineStyle: { color: "rgba(244,67,54,0.6)", type: "dashed" },
-              data: [{ yAxis: 1 }],
+              lineStyle: { color: "rgba(244,67,54,0.75)", type: "dashed", width: 1 },
+              data: [{ yAxis: warnH, name: `警戒${warnH}h` }],
             },
           },
         ],
@@ -250,8 +401,16 @@ export default {
       chart.setOption(option, true);
     },
     handleResize() {
-      if (this.pieChart) this.pieChart.resize();
-      if (this.gaugeChart) this.gaugeChart.resize();
+      try {
+        if (this.pieChart) this.pieChart.resize();
+      } catch (e) {
+        /* ignore */
+      }
+      try {
+        if (this.gaugeChart) this.gaugeChart.resize();
+      } catch (e) {
+        /* ignore */
+      }
     },
   },
   computed: {
@@ -282,132 +441,48 @@ export default {
       const t = this.latestDeviceType;
       return t && t !== "电气" && t !== "机械" ? this.totalDowntimeHours : 0;
     },
-    pieLegendItems() {
-      const total = this.totalDowntimeHours;
-      const percent = (v) => (total > 0 ? (v / total) * 100 : 0);
-      return [
-        { name: "电气", text: `电气 ${percent(this.electricHours).toFixed(0)}%` },
-        { name: "机械", text: `机械 ${percent(this.mechanicalHours).toFixed(0)}%` },
-        { name: "其他", text: `其他 ${percent(this.otherHours).toFixed(0)}%` },
-      ];
-    },
   },
 };
 </script>
 
 <style lang="less" scoped>
-.panel-section {
-  flex: 1;
-  background-color: transparent;
-  border-radius: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+@import "../styles/panelSectionLayout.less";
 
-  .section-title {
-    font-size: 14px;
-    font-weight: bold;
-    color: #e6e9f0;
-    margin-bottom: 0;
-  }
+.panel-section {
+  .dashboard-panel-section-core();
 
   .accident-summary {
     display: flex;
-    gap: 16px;
-    align-items: center;
+    gap: 10px;
+    align-items: stretch;
     justify-content: center;
-    flex: 0 0 auto;
+    flex: 1 1 0;
+    min-height: 0;
   }
 
-  .gauge-wrap {
-    width: 180px;
-    height: 130px;
-    min-width: 180px;
+  .chart-cell {
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
     display: flex;
     flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    .gauge-chart {
-      width: 100%;
-      height: 112px;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.12);
+    padding: 4px;
+    box-sizing: border-box;
+
+    &:first-child {
+      border-right: 1px solid rgba(55, 76, 98, 0.45);
+      margin-right: 2px;
+      padding-right: 8px;
     }
   }
 
-  .pie-wrap {
-    flex: 0 0 180px;
-    height: 130px;
-    min-width: 180px;
-    display: grid;
-    grid-template-columns: 58px 122px;
-    grid-template-rows: 112px 12px;
-    align-items: center;
-    justify-content: center;
-    justify-items: center;
-    .pie-chart {
-      grid-column: 2;
-      grid-row: 1;
-      width: 122px;
-      height: 112px;
-    }
-
-    .pie-legend-column {
-      grid-column: 1;
-      grid-row: 1;
-      display: flex;
-      flex-direction: column;
-      align-items: flex-start;
-      justify-content: center;
-      gap: 4px;
-      align-self: center;
-      justify-self: start;
-    }
-
-    .legend-item {
-      display: inline-flex;
-      align-items: center;
-      gap: 3px;
-      white-space: nowrap;
-      font-size: 13px;
-      color: #8c9ab3;
-      line-height: 1;
-    }
-
-    .legend-item.active {
-      color: #e6e9f0;
-      font-weight: 600;
-    }
-
-    .dot {
-      width: 7px;
-      height: 7px;
-      border-radius: 50%;
-      flex-shrink: 0;
-    }
-
-    .dot.电气 {
-      background-color: #5470c6;
-    }
-
-    .dot.机械 {
-      background-color: #ff9800;
-    }
-
-    .dot.其他 {
-      background-color: #f44336;
-    }
-  }
-
-  .chart-caption {
-    grid-column: 1 / -1;
-    grid-row: 2;
+  .pie-chart,
+  .trend-chart {
     width: 100%;
-    text-align: center;
-    font-size: 13px;
-    color: #8c9ab3;
-    line-height: 14px;
-    margin-top: -4px;
+    flex: 1;
+    min-height: 0;
   }
-
 }
 </style>
