@@ -1,5 +1,5 @@
 module.exports = {
-  publicPath: '/2150-data-screen/',
+
   lintOnSave: false,
   devServer: {
     port: Number(process.env.VUE_APP_DEV_SERVER_PORT) || 8080,
